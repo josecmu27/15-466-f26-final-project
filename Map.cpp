@@ -184,19 +184,6 @@ bool Map::in_bounds(int col, int row) const {
 	return col >= 0 && row >= 0 && col < cols_ && row < rows_;
 }
 
-Map::Tile Map::tile_at(int col, int row) const {
-	if (!in_bounds(col, row)) throw std::runtime_error("Map::tile_at: cell out of bounds");
-	return tiles_[index(col, row)];
-}
-
-char const *Map::tile_name(Tile tile) {
-	switch (tile) {
-		case Tile::Grass: return "grass";
-		case Tile::Base: return "base";
-	}
-	return "?";
-}
-
 glm::vec3 Map::cell_center(int col, int row) const {
 	if (!in_bounds(col, row)) throw std::runtime_error("Map::cell_center: cell out of bounds");
 	float origin_x = -0.5f * float(cols_) * tile_size_;
@@ -208,11 +195,13 @@ glm::vec3 Map::cell_center(int col, int row) const {
 	);
 }
 
-glm::vec3 Map::tower_anchor(int col, int row) const {
-	if (tile_at(col, row) != Tile::Grass) {
-		throw std::runtime_error("Map::tower_anchor: cell is not grass");
-	}
-	return cell_center(col, row);
+bool Map::place_troop(glm::vec2 pos) {
+	int col = 0;
+	int row = 0;
+	if (!world_to_cell(glm::vec3(pos, 0.0f), col, row)) return false;
+	if (tiles_[index(col, row)] != Tile::Grass) return false;
+	troops_.push_back(Troop{glm::vec2(cell_center(col, row))});
+	return true;
 }
 
 bool Map::world_to_cell(glm::vec3 const &world, int &col, int &row) const {
@@ -223,24 +212,6 @@ bool Map::world_to_cell(glm::vec3 const &world, int &col, int &row) const {
 	return in_bounds(col, row);
 }
 
-glm::vec3 Map::base_position() const {
-	return glm::vec3(base_anchor_, 0.0f);
-}
-
-std::vector< Map::Cell > Map::cells_in_radius(glm::vec3 const &world, float radius) const {
-	std::vector< Cell > out;
-	float r2 = radius * radius;
-	for (int row = 0; row < rows_; ++row) {
-		for (int col = 0; col < cols_; ++col) {
-			glm::vec3 p = cell_center(col, row);
-			float dx = p.x - world.x;
-			float dy = p.y - world.y;
-			if (dx * dx + dy * dy <= r2) out.push_back(Cell{col, row});
-		}
-	}
-	return out;
-}
-
 glm::vec3 Map::bounds_min() const {
 	return glm::vec3(-0.5f * float(cols_) * tile_size_, -0.5f * float(rows_) * tile_size_, 0.0f);
 }
@@ -249,7 +220,7 @@ glm::vec3 Map::bounds_max() const {
 	return glm::vec3(0.5f * float(cols_) * tile_size_, 0.5f * float(rows_) * tile_size_, 0.0f);
 }
 
-void Map::draw(glm::mat4 const &clip_from_world, float time) const {
+void Map::draw(glm::mat4 const &clip_from_world, float time, int hover_col, int hover_row) const {
 	int frame = (int)std::floor(time * 12.0f);
 	frame_.clear();
 
@@ -277,6 +248,34 @@ void Map::draw(glm::mat4 const &clip_from_world, float time) const {
 		glBindVertexArray(0);
 		glBindTexture(GL_TEXTURE_2D, 0);
 		glUseProgram(0);
+	}
+
+	if (in_bounds(hover_col, hover_row)) {
+		glm::vec2 c(cell_center(hover_col, hover_row));
+		float h = tile_size_ * 0.46f;
+		bool base = tiles_[index(hover_col, hover_row)] == Tile::Base;
+		glm::u8vec4 wash = base ? glm::u8vec4(176, 48, 40, 90) : glm::u8vec4(70, 140, 60, 90);
+		glm::u8vec4 line = base ? glm::u8vec4(120, 24, 22, 255) : glm::u8vec4(28, 70, 24, 255);
+		auto box = shape_round_rect(c - glm::vec2(h), c + glm::vec2(h), 0.12f, 3, 1, 0.0f);
+		Mesh mark;
+		paint_polygon(mark, box, wash);
+		std::vector< glm::vec2 > edge = boil_points(box, 0.02f, frame, 90);
+		paint_ribbon(mark, edge, 0.07f, line, true);
+		upload(frame_vbo_, frame_vao_, mark);
+		draw_uploaded(frame_vao_, (GLuint)mark.size(), clip_from_world);
+	}
+
+	if (!troops_.empty()) {
+		Mesh tokens;
+		glm::u8vec4 ink(27, 16, 18, 255);
+		glm::u8vec4 body(196, 84, 58, 255);
+		float radius = tile_size_ * 0.28f;
+		for (Troop const &troop : troops_) {
+			paint_ellipse(tokens, troop.pos, radius + 0.06f, radius + 0.06f, 0.0f, ink, 18, 0, 0.0f);
+			paint_ellipse(tokens, troop.pos, radius, radius, 0.0f, body, 18, 0, 0.0f);
+		}
+		upload(frame_vbo_, frame_vao_, tokens);
+		draw_uploaded(frame_vao_, (GLuint)tokens.size(), clip_from_world);
 	}
 
 	glDisable(GL_BLEND);
@@ -405,7 +404,6 @@ void Map::load_base_sprite() {
 	}
 	int base_col0 = 0;
 	int base_row0 = (rows_ - kBaseRows) / 2;
-	base_ = Cell{base_col0 + kBaseCols / 2, base_row0 + kBaseRows / 2};
 
 	glm::vec2 half_tile(tile_size_ * 0.5f);
 	glm::vec2 block_min(cell_center(base_col0, base_row0 + kBaseRows - 1));
