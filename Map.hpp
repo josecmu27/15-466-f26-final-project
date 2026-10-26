@@ -55,6 +55,8 @@ struct Map {
 	// pass glm::mat4(1.0f).
 	void draw_film(glm::mat4 const &clip_from_clip, float time) const;
 
+	glm::vec3 cell_center(int col, int row) const;
+
 private:
 	enum class Tile : uint8_t {
 		Grass,
@@ -71,7 +73,6 @@ private:
 	};
 
 	bool in_bounds(int col, int row) const;
-	glm::vec3 cell_center(int col, int row) const;
 
 	void build_from_ascii(std::string const &ascii);
 	void rebuild();

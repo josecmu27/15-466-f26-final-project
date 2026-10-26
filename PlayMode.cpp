@@ -12,6 +12,43 @@ PlayMode::PlayMode() {
 	float mx = 0.0f, my = 0.0f;
 	SDL_GetMouseState(&mx, &my);
 	mouse = glm::vec2(mx, my);
+
+	// TESTING Troop Placement
+	// Create Troops
+	auto cherry = std::make_shared<Brawler>(map.cell_center(0, 0), "CherryBrawler", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.0f, // Attack Rate
+                                1.0f, // Movement Speed
+                                Team::FRUIT);
+
+	auto radish1 = std::make_shared<Brawler>(map.cell_center(4, 0), "RadishBrawler", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::VEGETABLE);
+	auto radish2 = std::make_shared<Brawler>(map.cell_center(9, 0), "RadishBrawler", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::VEGETABLE);
+	cherry->set_target(radish1);
+	radish1->set_target(cherry);
+	radish2->set_target(cherry);
+	
+	troops.emplace_back(cherry);
+	troops.emplace_back(radish1);
+	troops.emplace_back(radish2);
+
+
 }
 
 PlayMode::~PlayMode() {
@@ -34,6 +71,15 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 
 void PlayMode::update(float elapsed) {
 	time_ += elapsed;
+
+	map.troops().clear();
+	for (auto &troop : troops) {
+		if (troop->is_dead()) continue;
+
+		map.troops().push_back(Map::Troop{ glm::vec2(troop->get_position()) });
+
+		troop->update(elapsed);
+	}
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size_) {
@@ -45,7 +91,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	float aspect = float(drawable_size.x) / float(drawable_size.y);
 	glm::mat4 clip = clip_from_world(aspect);
 	refresh_hover();
-
 	map.draw(clip, time_, hover_col, hover_row);
 	map.draw_film(glm::mat4(1.0f), time_);
 

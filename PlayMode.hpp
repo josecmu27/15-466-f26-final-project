@@ -4,6 +4,7 @@
 #include "Map.hpp"
 
 #include <glm/glm.hpp>
+#include "Brawler.hpp"
 
 struct PlayMode : Mode {
 	PlayMode();
@@ -25,4 +26,7 @@ struct PlayMode : Mode {
 	glm::mat4 clip_from_world(float aspect) const;
 	bool mouse_to_world(glm::vec3 &hit) const;
 	void refresh_hover();
+
+	// GAME LOGIC
+	std::vector<std::shared_ptr<Troop>> troops;
 };
