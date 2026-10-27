@@ -26,7 +26,30 @@ struct PlayMode : Mode {
 	glm::mat4 clip_from_world(float aspect) const;
 	bool mouse_to_world(glm::vec3 &hit) const;
 	void refresh_hover();
+	bool pointer_on_slot() const;
+	float map_aspect() const;
+
+	// Drops a cherry brawler at the center of the grass cell under `world`.
+	void place_troop(glm::vec2 world);
+	void load_troop_sprite();
+	void draw_troops(glm::mat4 const &clip_from_world);
+	void draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color);
+	void draw_bar();
 
 	// GAME LOGIC
 	std::vector<std::shared_ptr<Troop>> troops;
+
+	GLuint troop_tex_ = 0;
+	GLuint troop_vbo_ = 0;
+	GLuint troop_vao_ = 0;
+	glm::vec2 troop_uv_min_ = glm::vec2(0.0f);
+	glm::vec2 troop_uv_max_ = glm::vec2(1.0f);
+	glm::vec2 troop_half_ = glm::vec2(0.7f);
+
+	static constexpr float bar_frac_ = 0.16f;
+	static constexpr int cherry_cost_ = 2;
+	int resources_ = 10;
+	bool dragging_ = false;
+	GLuint bar_vbo_ = 0;
+	GLuint bar_vao_ = 0;
 };
