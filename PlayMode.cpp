@@ -118,7 +118,7 @@ void PlayMode::update(float elapsed) {
 	}
 
 	if (troop_spawn_timer < 0.0f){
-		spawn_vegetable_troop();
+		// spawn_vegetable_troop();
 		troop_spawn_timer = troop_spawn_rate;
 	}
 }
