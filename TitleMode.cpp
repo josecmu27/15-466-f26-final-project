@@ -108,6 +108,43 @@ std::vector< glm::vec2 > round_rect(glm::vec2 mn, glm::vec2 mx, float rad, int s
 	return pts;
 }
 
+// Old-film overlay in clip space, matching Map::draw_film in PlayMode:
+// a dark vignette, flickering grain, and an occasional vertical scratch.
+void paint_film(Mesh &fx, float time) {
+	int frame = (int)std::floor(time * 8.0f);
+	glm::u8vec4 clear(0, 0, 0, 0);
+	glm::u8vec4 dark(12, 6, 4, 150);
+	int segs = 28;
+	for (int i = 0; i < segs; ++i) {
+		float a0 = float(i) / float(segs) * kTau;
+		float a1 = float(i + 1) / float(segs) * kTau;
+		glm::vec2 i0 = 0.62f * glm::vec2(std::cos(a0), std::sin(a0));
+		glm::vec2 i1 = 0.62f * glm::vec2(std::cos(a1), std::sin(a1));
+		glm::vec2 o0 = 1.55f * glm::vec2(std::cos(a0), std::sin(a0));
+		glm::vec2 o1 = 1.55f * glm::vec2(std::cos(a1), std::sin(a1));
+		fx.push_back(TitleMode::Vertex{glm::vec3(i0, 0.0f), clear});
+		fx.push_back(TitleMode::Vertex{glm::vec3(o0, 0.0f), dark});
+		fx.push_back(TitleMode::Vertex{glm::vec3(o1, 0.0f), dark});
+		fx.push_back(TitleMode::Vertex{glm::vec3(i0, 0.0f), clear});
+		fx.push_back(TitleMode::Vertex{glm::vec3(o1, 0.0f), dark});
+		fx.push_back(TitleMode::Vertex{glm::vec3(i1, 0.0f), clear});
+	}
+	for (int i = 0; i < 140; ++i) {
+		glm::vec2 p(hash01(i, frame / 2, 1) * 2.0f - 1.0f, hash01(i, frame / 2, 2) * 2.0f - 1.0f);
+		float s = 0.0025f + hash01(i, 3, 3) * 0.0035f;
+		bool light = hash01(i, 4, 4) > 0.55f;
+		glm::u8vec4 c = light ? glm::u8vec4(255, 244, 220, 50) : glm::u8vec4(20, 10, 8, 60);
+		tri(fx, p, p + glm::vec2(s, 0.0f), p + glm::vec2(0.0f, s), c);
+	}
+	if (hash01(frame, 8, 8) > 0.35f) {
+		float x = hash01(frame, 9, 1) * 1.6f - 0.8f;
+		glm::u8vec4 scratch(255, 250, 240, 35);
+		glm::vec2 a(x, -1.0f), b(x + 0.003f, -1.0f), c(x + 0.001f, 1.0f), d(x + 0.004f, 1.0f);
+		tri(fx, a, b, c, scratch);
+		tri(fx, b, d, c, scratch);
+	}
+}
+
 float text_width(std::string const &text) {
 	// Mirrors the glyph lookup in DrawLines::draw_text so text can be centered.
 	float width = 0.0f;
@@ -244,6 +281,7 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 }
 
 void TitleMode::update(float elapsed) {
+	time_ += elapsed;
 	hover_ = button_at(mouse_ui());
 
 	if (start_requested_) {
@@ -342,6 +380,20 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 
 		draw_bold_text(lines, "START", kStartCenter + button_lift(Button::Start), 0.11f, 0.005f, kPaper);
 		draw_bold_text(lines, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.11f, 0.005f, kInk);
+	}
+
+	{ // Film overlay last, already in clip space, so it covers the whole screen including text.
+		Mesh fx;
+		paint_film(fx, time_);
+		glBindBuffer(GL_ARRAY_BUFFER, shapes_vbo_);
+		glBufferData(GL_ARRAY_BUFFER, fx.size() * sizeof(Vertex), fx.data(), GL_STREAM_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glUseProgram(color_program->program);
+		glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+		glBindVertexArray(shapes_vao_);
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)fx.size());
+		glBindVertexArray(0);
+		glUseProgram(0);
 	}
 
 	glDisable(GL_BLEND);

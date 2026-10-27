@@ -31,6 +31,7 @@ struct TitleMode : Mode {
 	};
 
 private:
+	float time_ = 0.0f; // drives the film grain/scratch flicker
 	bool start_requested_ = false;
 
 	glm::uvec2 window_size_ = glm::uvec2(1280, 720);
