@@ -108,15 +108,6 @@ std::vector< glm::vec2 > round_rect(glm::vec2 mn, glm::vec2 mx, float rad, int s
 	return pts;
 }
 
-// Hand-drawn wobble that changes a few times per second, like the map's strokes.
-std::vector< glm::vec2 > boil(std::vector< glm::vec2 > pts, float amount, int frame, int salt) {
-	for (size_t i = 0; i < pts.size(); ++i) {
-		pts[i].x += (hash01(int(i), frame, salt) - 0.5f) * 2.0f * amount;
-		pts[i].y += (hash01(int(i), frame, salt + 1) - 0.5f) * 2.0f * amount;
-	}
-	return pts;
-}
-
 float text_width(std::string const &text) {
 	// Mirrors the glyph lookup in DrawLines::draw_text so text can be centered.
 	float width = 0.0f;
@@ -253,7 +244,6 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 }
 
 void TitleMode::update(float elapsed) {
-	time_ += elapsed;
 	hover_ = button_at(mouse_ui());
 
 	if (start_requested_) {
@@ -272,7 +262,6 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		0.0f, 0.0f, 1.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f
 	);
-	int frame = (int)std::floor(time_ * 8.0f);
 
 	glClearColor(0.20f, 0.11f, 0.08f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -292,18 +281,6 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		auto card = round_rect(card_min, card_max, 0.08f, 4);
 		paint_polygon(shapes, round_rect(card_min + glm::vec2(0.03f, -0.03f), card_max + glm::vec2(0.03f, -0.03f), 0.08f, 4), glm::u8vec4(10, 5, 4, 120));
 		paint_polygon(shapes, card, kPaper);
-
-		// Scattered paper blotches.
-		for (int i = 0; i < 18; ++i) {
-			glm::vec2 c(glm::mix(card_min.x + 0.1f, card_max.x - 0.1f, hash01(i, 1, 40)), glm::mix(meadow_top + 0.1f, card_max.y - 0.1f, hash01(i, 2, 41)));
-			float r = 0.05f + hash01(i, 3, 42) * 0.12f;
-			std::vector< glm::vec2 > blot;
-			for (int k = 0; k < 12; ++k) {
-				float a = float(k) / 12.0f * kTau;
-				blot.push_back(c + r * (0.8f + 0.4f * hash01(i, k, 43)) * glm::vec2(std::cos(a), 0.7f * std::sin(a)));
-			}
-			paint_polygon(shapes, blot, glm::u8vec4(kPaperShade.r, kPaperShade.g, kPaperShade.b, 70));
-		}
 
 		// Meadow with a wavy top edge.
 		std::vector< glm::vec2 > hill;
@@ -326,8 +303,8 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 			float lean = (hash01(i, 7, 52) - 0.5f) * 0.03f;
 			paint_outline(shapes, {base, base + glm::vec2(lean, 0.05f)}, 0.012f, kGrassDark, false);
 		}
-		paint_outline(shapes, boil(hill, 0.004f, frame, 7), 0.018f, kInk, false);
-		paint_outline(shapes, boil(card, 0.004f, frame, 3), 0.022f, kInk, true);
+		paint_outline(shapes, hill, 0.018f, kInk, false);
+		paint_outline(shapes, card, 0.022f, kInk, true);
 	}
 
 	// Buttons lift on hover and press down while held.
@@ -335,16 +312,16 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		if (hover_ != button) return glm::vec2(0.0f);
 		return pressing_ == button ? glm::vec2(0.0f, -0.012f) : glm::vec2(0.0f, 0.012f);
 	};
-	auto paint_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover, int salt) {
+	auto paint_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover) {
 		glm::vec2 lift = button_lift(button);
 		auto body = round_rect(center - kButtonHalf + lift, center + kButtonHalf + lift, 0.06f, 4);
 		auto shadow = round_rect(center - kButtonHalf + glm::vec2(0.0f, -0.025f), center + kButtonHalf + glm::vec2(0.0f, -0.025f), 0.06f, 4);
 		paint_polygon(shapes, shadow, kInk);
 		paint_polygon(shapes, body, hover_ == button ? fill_hover : fill);
-		paint_outline(shapes, boil(body, 0.004f, frame, salt), 0.02f, kInk, true);
+		paint_outline(shapes, body, 0.02f, kInk, true);
 	};
-	paint_button(Button::Start, kStartCenter, kCherry, kCherryLight, 11);
-	paint_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight, 13);
+	paint_button(Button::Start, kStartCenter, kCherry, kCherryLight);
+	paint_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight);
 
 	glBindBuffer(GL_ARRAY_BUFFER, shapes_vbo_);
 	glBufferData(GL_ARRAY_BUFFER, shapes.size() * sizeof(Vertex), shapes.data(), GL_STREAM_DRAW);
@@ -358,11 +335,10 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 
 	{ // Text goes last so it sits on top of everything.
 		DrawLines lines(clip_from_ui);
-		float wiggle = 0.004f * std::sin(time_ * 2.0f);
 		// Shrink the title on narrow windows so it stays inside the card.
 		float title_h = std::min(0.24f, (2.0f * card_hw - 0.3f) / text_width(kTitle));
-		draw_bold_text(lines, kTitle, glm::vec2(0.0f, 0.42f + wiggle) + glm::vec2(0.012f, -0.012f), title_h, 0.012f, kInk);
-		draw_bold_text(lines, kTitle, glm::vec2(0.0f, 0.42f + wiggle), title_h, 0.010f, kCherry);
+		draw_bold_text(lines, kTitle, glm::vec2(0.0f, 0.42f) + glm::vec2(0.012f, -0.012f), title_h, 0.012f, kInk);
+		draw_bold_text(lines, kTitle, glm::vec2(0.0f, 0.42f), title_h, 0.010f, kCherry);
 
 		draw_bold_text(lines, "START", kStartCenter + button_lift(Button::Start), 0.11f, 0.005f, kPaper);
 		draw_bold_text(lines, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.11f, 0.005f, kInk);
