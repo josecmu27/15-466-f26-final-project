@@ -26,7 +26,7 @@ PlayMode::PlayMode() {
 	mouse = glm::vec2(mx, my);
 
 	// TESTING Troop Placement
-	auto radish1 = std::make_shared<Brawler>(map.cell_center(6, 0), "RadishBrawler1", 
+	auto radish1 = std::make_shared<Brawler>(map.cell_center(6, 6), "RadishBrawler1", 
                                 100, // Health
                                 2,   // Resource Cost
                                 25,  // Attack Damage
@@ -43,7 +43,7 @@ PlayMode::PlayMode() {
                                 1.0f, // Movement Speed
                                 Team::VEGETABLE);
 
-	auto radish3 = std::make_shared<Brawler>(map.cell_center(9, 1), "RadishBrawler3", 
+	auto radish3 = std::make_shared<Brawler>(map.cell_center(10, 1), "RadishBrawler3", 
                                 100, // Health
                                 2,   // Resource Cost
                                 25,  // Attack Damage
@@ -52,7 +52,7 @@ PlayMode::PlayMode() {
                                 1.0f, // Movement Speed
                                 Team::VEGETABLE);
 
-	auto radish4 = std::make_shared<Brawler>(map.cell_center(9, 4), "RadishBrawle4", 
+	auto radish4 = std::make_shared<Brawler>(map.cell_center(12, 4), "RadishBrawle4", 
                                 100, // Health
                                 2,   // Resource Cost
                                 25,  // Attack Damage
@@ -105,9 +105,15 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 void PlayMode::update(float elapsed) {
 	time_ += elapsed;
 
+	glm::vec2 left(map.bounds_min());
+	glm::vec2 right(map.bounds_max());
+
 	for (auto &troop : troops) {
 		if (troop->is_dead()) continue;
 		troop->update(elapsed, troops);
+
+		glm::vec2 p = glm::clamp(troop->get_position(), left, right);
+		troop->set_position(p);
 	}
 }
 
