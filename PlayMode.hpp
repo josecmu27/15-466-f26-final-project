@@ -54,4 +54,11 @@ struct PlayMode : Mode {
 	bool dragging_ = false;
 	GLuint bar_vbo_ = 0;
 	GLuint bar_vao_ = 0;
+
+	// TODO: Remove this after prototype!
+	float troop_spawn_rate = 7.5f;
+	float troop_spawn_timer = 0.0f;
+
+	void spawn_vegetable_troop();
+
 };
