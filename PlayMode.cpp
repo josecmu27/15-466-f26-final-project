@@ -63,7 +63,18 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		glm::vec3 hit;
-		if (mouse_to_world(hit)) map.place_troop(glm::vec2(hit));
+		int col = 0, row = 0;
+		if (mouse_to_world(hit) && map.world_to_cell(hit, col, row) && map.is_walkable(col, row)) {
+			auto cherry = std::make_shared<Brawler>(map.cell_center(col, row), "CherryBrawler", 
+				100, // Health
+				2,   // Resource Cost
+				25,  // Attack Damage
+				1.0f, // Attack Range
+				1.0f, // Attack Rate
+				1.0f, // Movement Speed
+				Team::FRUIT);
+			troops.emplace_back(cherry);
+		}
 		return true;
 	}
 	return false;
@@ -71,13 +82,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 
 void PlayMode::update(float elapsed) {
 	time_ += elapsed;
-
-	map.troops().clear();
 	for (auto &troop : troops) {
 		if (troop->is_dead()) continue;
-
-		map.troops().push_back(Map::Troop{ glm::vec2(troop->get_position()) });
-
 		troop->update(elapsed);
 	}
 }
@@ -91,7 +97,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	float aspect = float(drawable_size.x) / float(drawable_size.y);
 	glm::mat4 clip = clip_from_world(aspect);
 	refresh_hover();
-	map.draw(clip, time_, hover_col, hover_row);
+
+	std::vector<glm::vec2> troop_positions;
+	for (auto const &troop : troops) {
+		if (!troop->is_dead()) troop_positions.push_back(troop->get_position());
+	}
+
+	map.draw(clip, time_, hover_col, hover_row, troop_positions);
 	map.draw_film(glm::mat4(1.0f), time_);
 
 	GL_ERRORS();

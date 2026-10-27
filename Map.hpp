@@ -38,18 +38,11 @@ struct Map {
 	// True when `world` (any z) lands inside the grid. Writes the cell.
 	bool world_to_cell(glm::vec3 const &world, int &col, int &row) const;
 
-	// A troop moves in world XY. Its position is not a grid cell.
-	struct Troop {
-		glm::vec2 pos = glm::vec2(0.0f);
-	};
-
-	// Drops a stand-in troop at the center of the cell under `pos`.
-	// False when that point is off the board or on the base.
-	bool place_troop(glm::vec2 pos);
-	std::vector< Troop > &troops() { return troops_; }
+	// Tells if grid space can be walked on
+	bool is_walkable(int col, int row) const;
 
 	// `hover` outside the grid hides the cursor mark.
-	void draw(glm::mat4 const &clip_from_world, float time, int hover_col, int hover_row) const;
+	void draw(glm::mat4 const &clip_from_world, float time, int hover_col, int hover_row, std::vector<glm::vec2> const &troop_positions) const;
 
 	// Film grain, a hairline scratch, and a vignette. Vertices are in clip space;
 	// pass glm::mat4(1.0f).
@@ -86,7 +79,6 @@ private:
 	int cols_ = 0;
 	int rows_ = 0;
 	std::vector< Tile > tiles_;
-	std::vector< Troop > troops_;
 
 	std::vector< Vertex > backdrop_;
 	std::vector< Stroke > strokes_;

@@ -195,21 +195,16 @@ glm::vec3 Map::cell_center(int col, int row) const {
 	);
 }
 
-bool Map::place_troop(glm::vec2 pos) {
-	int col = 0;
-	int row = 0;
-	if (!world_to_cell(glm::vec3(pos, 0.0f), col, row)) return false;
-	if (tiles_[index(col, row)] != Tile::Grass) return false;
-	troops_.push_back(Troop{glm::vec2(cell_center(col, row))});
-	return true;
-}
-
 bool Map::world_to_cell(glm::vec3 const &world, int &col, int &row) const {
 	float origin_x = -0.5f * float(cols_) * tile_size_;
 	float origin_y = 0.5f * float(rows_) * tile_size_;
 	col = (int)std::floor((world.x - origin_x) / tile_size_);
 	row = (int)std::floor((origin_y - world.y) / tile_size_);
 	return in_bounds(col, row);
+}
+
+bool Map::is_walkable(int col, int row) const {
+	return in_bounds(col, row) && tiles_[index(col, row)] == Tile::Grass;
 }
 
 glm::vec3 Map::bounds_min() const {
@@ -220,7 +215,7 @@ glm::vec3 Map::bounds_max() const {
 	return glm::vec3(0.5f * float(cols_) * tile_size_, 0.5f * float(rows_) * tile_size_, 0.0f);
 }
 
-void Map::draw(glm::mat4 const &clip_from_world, float time, int hover_col, int hover_row) const {
+void Map::draw(glm::mat4 const &clip_from_world, float time, int hover_col, int hover_row, std::vector<glm::vec2> const &troop_positions) const {
 	int frame = (int)std::floor(time * 12.0f);
 	frame_.clear();
 
@@ -265,14 +260,14 @@ void Map::draw(glm::mat4 const &clip_from_world, float time, int hover_col, int 
 		draw_uploaded(frame_vao_, (GLuint)mark.size(), clip_from_world);
 	}
 
-	if (!troops_.empty()) {
+	if (!troop_positions.empty()) {
 		Mesh tokens;
 		glm::u8vec4 ink(27, 16, 18, 255);
 		glm::u8vec4 body(196, 84, 58, 255);
 		float radius = tile_size_ * 0.28f;
-		for (Troop const &troop : troops_) {
-			paint_ellipse(tokens, troop.pos, radius + 0.06f, radius + 0.06f, 0.0f, ink, 18, 0, 0.0f);
-			paint_ellipse(tokens, troop.pos, radius, radius, 0.0f, body, 18, 0, 0.0f);
+		for (glm::vec2 pos : troop_positions) {
+			paint_ellipse(tokens, pos, radius + 0.06f, radius + 0.06f, 0.0f, ink, 18, 0, 0.0f);
+			paint_ellipse(tokens, pos, radius, radius, 0.0f, body, 18, 0, 0.0f);
 		}
 		upload(frame_vbo_, frame_vao_, tokens);
 		draw_uploaded(frame_vao_, (GLuint)tokens.size(), clip_from_world);
