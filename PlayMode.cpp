@@ -110,7 +110,7 @@ void PlayMode::update(float elapsed) {
 
 	for (auto &troop : troops) {
 		if (troop->is_dead()) continue;
-		troop->update(elapsed, troops);
+		troop->update(elapsed, troops, paths);
 
 		glm::vec2 p = glm::clamp(troop->get_position(), left, right);
 		troop->set_position(p);
