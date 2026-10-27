@@ -8,7 +8,8 @@
 
 enum Team {
     FRUIT, // Player
-    VEGETABLE // Enemy
+    VEGETABLE, // Enemy
+    BASKET // Player's Base
 };
 
 class Troop {

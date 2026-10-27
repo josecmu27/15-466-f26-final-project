@@ -3,6 +3,7 @@
 
 void Brawler::update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths)
 {
+    if (team == Team::BASKET) return;
 
     auto target = target_troop.lock();
     attack_timer -= elapsed;
@@ -23,6 +24,7 @@ void Brawler::update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops,
 
 void Brawler::attack()
 {
+
     auto target = target_troop.lock();
     if (!target) return;
 
@@ -71,6 +73,7 @@ void Brawler::determine_target(std::vector<std::shared_ptr<Troop>> &troops)
     for (auto const &troop : troops){
         if (!troop || troop.get() == this) continue;
         if (troop->get_team() == team || troop->is_dead()) continue;
+        if (troop->get_team() == Team::BASKET && team == Team::FRUIT) continue;
 
         float distance_to_troop = glm::distance(troop->get_position(), position);
         

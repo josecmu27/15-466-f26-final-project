@@ -26,45 +26,56 @@ PlayMode::PlayMode() {
 	mouse = glm::vec2(mx, my);
 
 	// TESTING Troop Placement
-	// auto radish1 = std::make_shared<Brawler>(map.cell_center(6, 6), "RadishBrawler1", 
-    //                             100, // Health
-    //                             2,   // Resource Cost
-    //                             25,  // Attack Damage
-    //                             1.0f, // Attack Range
-    //                             1.5f, // Attack Rate (Intentionally slower)
-    //                             1.0f, // Movement Speed
-    //                             Team::VEGETABLE);
-	// auto radish2 = std::make_shared<Brawler>(map.cell_center(9, 0), "RadishBrawler2", 
-    //                             100, // Health
-    //                             2,   // Resource Cost
-    //                             25,  // Attack Damage
-    //                             1.0f, // Attack Range
-    //                             1.5f, // Attack Rate (Intentionally slower)
-    //                             1.0f, // Movement Speed
-    //                             Team::VEGETABLE);
+	auto radish1 = std::make_shared<Brawler>(map.cell_center(6, 6), "RadishBrawler1", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::VEGETABLE);
+	auto radish2 = std::make_shared<Brawler>(map.cell_center(9, 0), "RadishBrawler2", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::VEGETABLE);
 
-	// auto radish3 = std::make_shared<Brawler>(map.cell_center(10, 1), "RadishBrawler3", 
-    //                             100, // Health
-    //                             2,   // Resource Cost
-    //                             25,  // Attack Damage
-    //                             1.0f, // Attack Range
-    //                             1.5f, // Attack Rate (Intentionally slower)
-    //                             1.0f, // Movement Speed
-    //                             Team::VEGETABLE);
+	auto radish3 = std::make_shared<Brawler>(map.cell_center(10, 1), "RadishBrawler3", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::VEGETABLE);
 
-	// auto radish4 = std::make_shared<Brawler>(map.cell_center(12, 4), "RadishBrawle4", 
-    //                             100, // Health
-    //                             2,   // Resource Cost
-    //                             25,  // Attack Damage
-    //                             1.0f, // Attack Range
-    //                             1.5f, // Attack Rate (Intentionally slower)
-    //                             1.0f, // Movement Speed
-    //                             Team::VEGETABLE);
+	auto radish4 = std::make_shared<Brawler>(map.cell_center(12, 4), "RadishBrawle4", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::VEGETABLE);
 
-	// troops.emplace_back(radish1);
-	// troops.emplace_back(radish2);
-	// troops.emplace_back(radish3);
-	// troops.emplace_back(radish4);
+	troops.emplace_back(radish1);
+	troops.emplace_back(radish2);
+	troops.emplace_back(radish3);
+	troops.emplace_back(radish4);
+
+	auto basket = std::make_shared<Brawler>(map.cell_center(0, 5), "Basket", 
+                                1000, // Health
+                                10,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::BASKET);
+
+	troops.emplace_back(basket);
 
 	load_troop_sprite();
 }
