@@ -1,6 +1,7 @@
 #include "Brawler.hpp"
+#include "Pathfinder.hpp"
 
-void Brawler::update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops)
+void Brawler::update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths)
 {
 
     auto target = target_troop.lock();
@@ -14,7 +15,7 @@ void Brawler::update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops)
             attack_timer = attack_rate;
         }
     } else{
-        move_to_target(elapsed);
+        move_to_target(elapsed, troops, paths);
     }
   
 
@@ -37,7 +38,7 @@ void Brawler::attack()
 }
 
 /* todo: add pathfinding code */
-void Brawler::move_to_target(float elapsed)
+void Brawler::move_to_target(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths)
 {
     auto target = target_troop.lock();
     
@@ -46,11 +47,16 @@ void Brawler::move_to_target(float elapsed)
         return;
     }
 
-    if (target->get_position().x > position.x){
-        position.x += movement_speed * elapsed;
-    } else {
-        position.x -= movement_speed * elapsed;
+    std::vector<glm::vec2> others;
+    for (auto const &troop : troops) {
+        if (troop.get() == this || troop->is_dead()) continue;
+        others.push_back(troop->get_position());
     }
+
+    glm::vec2 wp = paths.next_waypoint(position, target->get_position(), others);
+    float dist = glm::distance(position, wp);
+    float step = movement_speed * elapsed;
+    if (dist > 0.0f) position = glm::mix(position, wp, std::min(1.0f, step / dist));
 }
 
 /* @brief find the closest troop from the opposite team

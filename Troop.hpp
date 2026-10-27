@@ -3,6 +3,8 @@
 #include <iostream>
 #include <memory>
 #include <glm/glm.hpp>
+#include <vector>
+#include "Pathfinder.hpp"
 
 enum Team {
     FRUIT, // Player
@@ -29,9 +31,9 @@ public:
 
     virtual ~Troop() = default;
 
-    virtual void update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops) = 0;
+    virtual void update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths) = 0;
     virtual void attack() = 0;
-    virtual void move_to_target(float elapsed) = 0;
+    virtual void move_to_target(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths) = 0;
     virtual void determine_target(std::vector<std::shared_ptr<Troop>> &troops) = 0;
 
     std::string get_name() const { return name; }

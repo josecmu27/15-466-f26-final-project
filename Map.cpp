@@ -152,12 +152,12 @@ Map::Map() : Map(
 	"................\n"
 	"................\n"
 	"................\n"
+	".........o......\n"
 	"................\n"
 	"................\n"
-	"................\n"
-	"................\n"
-	"................\n"
-	"................\n"
+	"..........o.....\n"
+	".....oo.........\n"
+	".........oo.....\n"
 	"................\n"
 ) {
 }
@@ -355,8 +355,12 @@ void Map::build_from_ascii(std::string const &ascii) {
 			throw std::runtime_error("Map: level rows must all be the same width");
 		}
 		for (int col = 0; col < cols_; ++col) {
-			if (rows[row][col] != '.') {
-				throw std::runtime_error(std::string("Map: unknown tile '") + rows[row][col] + "'");
+			char ch = rows[row][col];
+			if (ch == 'o') {
+				tiles_[index(col, row)] = Tile::Rock;
+			}
+			else if (ch != '.') {
+				throw std::runtime_error(std::string("Map: unknown tile '") + ch + "'");
 			}
 		}
 	}
@@ -535,6 +539,19 @@ void Map::rebuild() {
 				float len = 0.18f + hash01(seed, b, 9) * 0.22f;
 				add_stroke({a, a + d * len}, 0.035f, glm::u8vec4(36, 58, 28, 255), 0.02f, seed + b, false);
 			}
+		}
+	}
+
+	for (int row = 0; row < rows_; ++row) {
+		for (int col = 0; col < cols_; ++col) {
+			if (tiles_[index(col, row)] != Tile::Rock) continue;
+			glm::vec2 c(cell_center(col, row));
+			int seed = col * 31 + row * 7;
+			glm::vec2 h(0.75f, 0.6f);
+			auto rock = shape_round_rect(c - h, c + h, 0.45f, 4, seed, 0.08f);
+			paint_polygon(backdrop_, shape_round_rect(c - h + glm::vec2(0.08f, -0.1f), c + h + glm::vec2(0.08f, -0.1f), 0.45f, 4, seed, 0.08f), glm::u8vec4(40, 50, 28, 120)); // shadow
+			paint_polygon(backdrop_, rock, glm::u8vec4(128, 122, 112, 255));
+			add_stroke(rock, 0.09f, kInk, 0.03f, seed, true);
 		}
 	}
 

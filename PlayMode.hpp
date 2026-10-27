@@ -2,6 +2,7 @@
 
 #include "Mode.hpp"
 #include "Map.hpp"
+#include "Pathfinder.hpp"
 
 #include <glm/glm.hpp>
 #include "Brawler.hpp"
@@ -15,6 +16,7 @@ struct PlayMode : Mode {
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
 	Map map;
+	Pathfinder paths{map};
 	float time_ = 0.0f;
 
 	glm::uvec2 window_size = glm::uvec2(1280, 720);

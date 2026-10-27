@@ -35,6 +35,9 @@ struct Map {
 	glm::vec3 bounds_min() const;
 	glm::vec3 bounds_max() const;
 
+	int cols() const { return cols_; }
+	int rows() const { return rows_; }
+
 	// True when `world` (any z) lands inside the grid. Writes the cell.
 	bool world_to_cell(glm::vec3 const &world, int &col, int &row) const;
 
@@ -54,6 +57,7 @@ private:
 	enum class Tile : uint8_t {
 		Grass,
 		Base,
+		Rock,
 	};
 
 	struct Stroke {
