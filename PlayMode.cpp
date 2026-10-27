@@ -73,9 +73,10 @@ PlayMode::~PlayMode() {
 	if (troop_vao_ != 0) glDeleteVertexArrays(1, &troop_vao_);
 	if (troop_vbo_ != 0) glDeleteBuffers(1, &troop_vbo_);
 	if (troop_tex_ != 0) glDeleteTextures(1, &troop_tex_);
+	if (enemy_tex_ != 0) glDeleteTextures(1, &enemy_tex_);
 	if (bar_vao_ != 0) glDeleteVertexArrays(1, &bar_vao_);
 	if (bar_vbo_ != 0) glDeleteBuffers(1, &bar_vbo_);
-	troop_vao_ = troop_vbo_ = troop_tex_ = 0;
+	troop_vao_ = troop_vbo_ = troop_tex_ = enemy_tex_ = 0;
 	bar_vao_ = bar_vbo_ = 0;
 }
 
@@ -118,7 +119,7 @@ void PlayMode::update(float elapsed) {
 	}
 
 	if (troop_spawn_timer < 0.0f){
-		// spawn_vegetable_troop();
+		spawn_vegetable_troop();
 		troop_spawn_timer = troop_spawn_rate;
 	}
 }
@@ -275,12 +276,12 @@ void PlayMode::spawn_vegetable_troop()
 	);
 }
 
-void PlayMode::load_troop_sprite() {
+void PlayMode::load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half) {
 	glm::uvec2 size(0);
 	std::vector< glm::u8vec4 > pixels;
-	load_png(data_path("cherry_brawler.png"), &size, &pixels, LowerLeftOrigin);
+	load_png(data_path(file), &size, &pixels, LowerLeftOrigin);
 	if (size.x == 0 || size.y == 0 || pixels.empty()) {
-		throw std::runtime_error("PlayMode: cherry_brawler.png is empty");
+		throw std::runtime_error("PlayMode: " + file + " is empty");
 	}
 
 	int min_x = (int)size.x;
@@ -297,18 +298,18 @@ void PlayMode::load_troop_sprite() {
 		}
 	}
 	if (max_x < min_x || max_y < min_y) {
-		throw std::runtime_error("PlayMode: cherry_brawler.png has no visible pixels");
+		throw std::runtime_error("PlayMode: " + file + " has no visible pixels");
 	}
 
-	troop_uv_min_ = glm::vec2(float(min_x) / float(size.x), float(min_y) / float(size.y));
-	troop_uv_max_ = glm::vec2(float(max_x + 1) / float(size.x), float(max_y + 1) / float(size.y));
+	uv_min = glm::vec2(float(min_x) / float(size.x), float(min_y) / float(size.y));
+	uv_max = glm::vec2(float(max_x + 1) / float(size.x), float(max_y + 1) / float(size.y));
 	float aspect = float(max_x - min_x + 1) / float(max_y - min_y + 1);
 	float height = 1.7f;
-	troop_half_ = glm::vec2(height * aspect, height) * 0.5f;
+	half = glm::vec2(height * aspect, height) * 0.5f;
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glGenTextures(1, &troop_tex_);
-	glBindTexture(GL_TEXTURE_2D, troop_tex_);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, (GLsizei)size.x, (GLsizei)size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -316,6 +317,11 @@ void PlayMode::load_troop_sprite() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void PlayMode::load_troop_sprite() {
+	load_sprite_png("cherry_brawler.png", troop_tex_, troop_uv_min_, troop_uv_max_, troop_half_);
+	load_sprite_png("tomato_brawler.png", enemy_tex_, enemy_uv_min_, enemy_uv_max_, enemy_half_);
 
 	glGenBuffers(1, &troop_vbo_);
 	glGenVertexArrays(1, &troop_vao_);
@@ -353,39 +359,45 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 	};
 	static_assert(sizeof(SpriteVertex) == sizeof(glm::vec3) + sizeof(glm::u8vec4) + sizeof(glm::vec2));
 
-	std::vector< SpriteVertex > verts;
-	glm::u8vec4 white(255, 255, 255, 255);
-	for (auto const &troop : troops) {
-		if (!troop || troop->is_dead()) continue;
-		glm::vec2 c = troop->get_position();
-		glm::vec2 bl = c - troop_half_;
-		glm::vec2 tr = c + troop_half_;
-		float u0 = troop_uv_min_.x;
-		float u1 = troop_uv_max_.x;
-		if (troop->get_team() == Team::VEGETABLE) std::swap(u0, u1);
-		SpriteVertex quad[6] = {
-			{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, troop_uv_min_.y)},
-			{glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(u1, troop_uv_min_.y)},
-			{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, troop_uv_max_.y)},
-			{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, troop_uv_min_.y)},
-			{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, troop_uv_max_.y)},
-			{glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(u0, troop_uv_max_.y)},
-		};
-		verts.insert(verts.end(), quad, quad + 6);
-	}
-	if (verts.empty()) return;
-
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glBindBuffer(GL_ARRAY_BUFFER, troop_vbo_);
-	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
 	glUseProgram(color_texture_program->program);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, troop_tex_);
 	glBindVertexArray(troop_vao_);
+	glBindBuffer(GL_ARRAY_BUFFER, troop_vbo_);
 	glUniformMatrix4fv(color_texture_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_world));
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+
+	glm::u8vec4 white(255, 255, 255, 255);
+	auto draw_team = [&](Team team, GLuint tex, glm::vec2 uv_min, glm::vec2 uv_max, glm::vec2 half, bool flip) {
+		if (tex == 0) return;
+		std::vector< SpriteVertex > verts;
+		for (auto const &troop : troops) {
+			if (!troop || troop->is_dead() || troop->get_team() != team) continue;
+			glm::vec2 c = troop->get_position();
+			glm::vec2 bl = c - half;
+			glm::vec2 tr = c + half;
+			float u0 = uv_min.x;
+			float u1 = uv_max.x;
+			if (flip) std::swap(u0, u1);
+			SpriteVertex quad[6] = {
+				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, uv_min.y)},
+				{glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(u1, uv_min.y)},
+				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, uv_max.y)},
+				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, uv_min.y)},
+				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, uv_max.y)},
+				{glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(u0, uv_max.y)},
+			};
+			verts.insert(verts.end(), quad, quad + 6);
+		}
+		if (verts.empty()) return;
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+	};
+	draw_team(Team::FRUIT, troop_tex_, troop_uv_min_, troop_uv_max_, troop_half_, false);
+	draw_team(Team::VEGETABLE, enemy_tex_, enemy_uv_min_, enemy_uv_max_, enemy_half_, true);
+
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
