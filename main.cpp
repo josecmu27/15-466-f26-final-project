@@ -1,8 +1,8 @@
 //Mode.hpp declares the "Mode::current" static member variable, which is used to decide where event-handling, updating, and drawing events go:
 #include "Mode.hpp"
 
-//The 'PlayMode' mode plays the game:
-#include "PlayMode.hpp"
+//The 'TitleMode' mode shows the start screen, then switches to 'PlayMode':
+#include "TitleMode.hpp"
 
 //For asset loading:
 #include "Load.hpp"
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 
 	//create window:
 	Mode::window = SDL_CreateWindow(
-		"gp26 game3: require sound", //TODO: remember to set a title for your game!
+		"Fruit vs Vegetable",
 		1280, 720, //TODO: modify window size if you'd like
 		SDL_WINDOW_OPENGL
 		| SDL_WINDOW_RESIZABLE //uncomment to allow resizing
@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
 	call_load_functions();
 
 	//------------ create game mode + make current --------------
-	Mode::set_current(std::make_shared< PlayMode >());
+	Mode::set_current(std::make_shared< TitleMode >());
 
 	//------------ main loop ------------
 
