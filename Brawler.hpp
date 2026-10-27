@@ -14,9 +14,9 @@ public:
 
     std::weak_ptr<Troop> target_troop;
 
-    void update(float elapsed) override;
+    void update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops) override;
     void attack() override;
     void move_to_target(float elapsed) override;
-    void determine_target() override;
+    void determine_target(std::vector<std::shared_ptr<Troop>> &troops) override;
     void set_target(std::shared_ptr<Troop> target) { target_troop = target; }
 };

@@ -26,17 +26,24 @@ PlayMode::PlayMode() {
 	mouse = glm::vec2(mx, my);
 
 	// TESTING Troop Placement
-	// Create Troops
-	auto cherry = std::make_shared<Brawler>(map.cell_center(0, 0), "CherryBrawler", 
+	auto radish1 = std::make_shared<Brawler>(map.cell_center(6, 0), "RadishBrawler1", 
                                 100, // Health
                                 2,   // Resource Cost
                                 25,  // Attack Damage
                                 1.0f, // Attack Range
-                                1.0f, // Attack Rate
+                                1.5f, // Attack Rate (Intentionally slower)
                                 1.0f, // Movement Speed
-                                Team::FRUIT);
+                                Team::VEGETABLE);
+	auto radish2 = std::make_shared<Brawler>(map.cell_center(9, 0), "RadishBrawler2", 
+                                100, // Health
+                                2,   // Resource Cost
+                                25,  // Attack Damage
+                                1.0f, // Attack Range
+                                1.5f, // Attack Rate (Intentionally slower)
+                                1.0f, // Movement Speed
+                                Team::VEGETABLE);
 
-	auto radish1 = std::make_shared<Brawler>(map.cell_center(4, 0), "RadishBrawler", 
+	auto radish3 = std::make_shared<Brawler>(map.cell_center(9, 1), "RadishBrawler3", 
                                 100, // Health
                                 2,   // Resource Cost
                                 25,  // Attack Damage
@@ -44,7 +51,8 @@ PlayMode::PlayMode() {
                                 1.5f, // Attack Rate (Intentionally slower)
                                 1.0f, // Movement Speed
                                 Team::VEGETABLE);
-	auto radish2 = std::make_shared<Brawler>(map.cell_center(9, 0), "RadishBrawler", 
+
+	auto radish4 = std::make_shared<Brawler>(map.cell_center(9, 4), "RadishBrawle4", 
                                 100, // Health
                                 2,   // Resource Cost
                                 25,  // Attack Damage
@@ -52,13 +60,11 @@ PlayMode::PlayMode() {
                                 1.5f, // Attack Rate (Intentionally slower)
                                 1.0f, // Movement Speed
                                 Team::VEGETABLE);
-	cherry->set_target(radish1);
-	radish1->set_target(cherry);
-	radish2->set_target(cherry);
-	
-	troops.emplace_back(cherry);
+
 	troops.emplace_back(radish1);
 	troops.emplace_back(radish2);
+	// troops.emplace_back(radish3);
+	// troops.emplace_back(radish4);
 
 	load_troop_sprite();
 }
@@ -101,7 +107,7 @@ void PlayMode::update(float elapsed) {
 
 	for (auto &troop : troops) {
 		if (troop->is_dead()) continue;
-		troop->update(elapsed);
+		troop->update(elapsed, troops);
 	}
 }
 
@@ -227,8 +233,11 @@ void PlayMode::place_troop(glm::vec2 world) {
 	glm::vec2 pos(map.cell_center(col, row));
 	troops.push_back(std::make_shared<Brawler>(
 		pos, "CherryBrawler",
-		100, cherry_cost_, 25,
-		1.0f, 1.0f, 1.0f,
+		100, cherry_cost_, 
+		25,
+		1.0f, 
+		1.0f, 
+		1.0f,
 		Team::FRUIT
 	));
 }

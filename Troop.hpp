@@ -29,10 +29,10 @@ public:
 
     virtual ~Troop() = default;
 
-    virtual void update(float elapsed) = 0;
+    virtual void update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops) = 0;
     virtual void attack() = 0;
     virtual void move_to_target(float elapsed) = 0;
-    virtual void determine_target() = 0;
+    virtual void determine_target(std::vector<std::shared_ptr<Troop>> &troops) = 0;
 
     std::string get_name() const { return name; }
     Team get_team() const {return team; }
