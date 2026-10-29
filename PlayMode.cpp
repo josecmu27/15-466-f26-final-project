@@ -413,6 +413,59 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glUseProgram(0);
+
+	if (bar_vao_ != 0) {
+		struct ColorVertex {
+			glm::vec3 Position;
+			glm::u8vec4 Color;
+		};
+		std::vector< ColorVertex > bars;
+		auto quad = [&](glm::vec2 bl, glm::vec2 tr, glm::u8vec4 color) {
+			bars.push_back({glm::vec3(bl.x, bl.y, 0.0f), color});
+			bars.push_back({glm::vec3(tr.x, bl.y, 0.0f), color});
+			bars.push_back({glm::vec3(tr.x, tr.y, 0.0f), color});
+			bars.push_back({glm::vec3(bl.x, bl.y, 0.0f), color});
+			bars.push_back({glm::vec3(tr.x, tr.y, 0.0f), color});
+			bars.push_back({glm::vec3(bl.x, tr.y, 0.0f), color});
+		};
+		glm::u8vec4 track(36, 22, 18, 230);
+		for (auto const &troop : troops) {
+			if (!troop || troop->is_dead()) continue;
+			if (troop->get_team() != Team::FRUIT && troop->get_team() != Team::VEGETABLE) continue;
+			int max_hp = troop->get_max_health();
+			int hp = troop->get_health();
+			if (max_hp <= 0 || hp >= max_hp) continue;
+			float filled = std::clamp(float(hp) / float(max_hp), 0.0f, 1.0f);
+			glm::vec2 half = troop->get_team() == Team::VEGETABLE ? enemy_half_ : troop_half_;
+			glm::vec2 c = troop->get_position();
+			float width = std::max(half.x * 1.55f, 0.9f);
+			float height = 0.14f;
+			float y = c.y + half.y + 0.08f;
+			glm::vec2 bg0(c.x - width * 0.5f - 0.04f, y - 0.035f);
+			glm::vec2 bg1(c.x + width * 0.5f + 0.04f, y + height + 0.035f);
+			quad(bg0, bg1, track);
+			if (filled <= 0.0f) continue;
+			glm::u8vec4 fill(
+				(uint8_t)std::lround(glm::mix(188.0f, 58.0f, filled)),
+				(uint8_t)std::lround(glm::mix(40.0f, 164.0f, filled)),
+				(uint8_t)std::lround(glm::mix(34.0f, 46.0f, filled)),
+				255
+			);
+			quad(glm::vec2(c.x - width * 0.5f, y), glm::vec2(c.x - width * 0.5f + width * filled, y + height), fill);
+		}
+		if (!bars.empty()) {
+			glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+			glBufferData(GL_ARRAY_BUFFER, bars.size() * sizeof(ColorVertex), bars.data(), GL_DYNAMIC_DRAW);
+			glUseProgram(color_program->program);
+			glBindVertexArray(bar_vao_);
+			glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_world));
+			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)bars.size());
+			glBindVertexArray(0);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			glUseProgram(0);
+		}
+	}
+
 	glDisable(GL_BLEND);
 }
 
