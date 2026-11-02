@@ -44,6 +44,9 @@ struct Map {
 	// Tells if grid space can be walked on
 	bool is_walkable(int col, int row) const;
 
+	// Friendly troops may be placed on walkable cells west of the river.
+	bool can_place(int col, int row) const;
+
 	// `hover` outside the grid hides the cursor mark.
 	void draw(glm::mat4 const &clip_from_world, float time, int hover_col, int hover_row, std::vector<glm::vec2> const &troop_positions) const;
 
@@ -58,6 +61,8 @@ private:
 		Grass,
 		Base,
 		Rock,
+		Water,
+		Bridge,
 	};
 
 	struct Stroke {
@@ -95,6 +100,7 @@ private:
 	mutable GLuint frame_vao_ = 0;
 
 	void load_base_sprite();
+	void place_river();
 	glm::vec2 base_anchor_ = glm::vec2(0.0f);
 	glm::vec2 base_half_ = glm::vec2(1.0f);
 	glm::vec2 base_uv_min_ = glm::vec2(0.0f);
