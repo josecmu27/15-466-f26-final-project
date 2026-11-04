@@ -354,7 +354,7 @@ void PlayMode::load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &
 void PlayMode::load_walk_frames() {
 	std::string files[walk_frames_];
 	for (int i = 0; i < walk_frames_; ++i) {
-		files[i] = "Cherry/CherryBrawler_Walk-" + std::to_string(i + 1) + ".png";
+		files[i] = "BlueTeam/Cherry/Walk/CherryBrawler_Walk-" + std::to_string(i + 1) + ".png";
 	}
 	struct Image {
 		glm::uvec2 size = glm::uvec2(0);
