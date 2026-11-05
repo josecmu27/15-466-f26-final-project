@@ -46,7 +46,18 @@ void Brawler::update(float elapsed)
 
     attack_timer -= elapsed;
 
-    determine_target();
+    auto ordered = order.attack_target.lock();
+    if (order.type == OrderType::Attack && (!ordered || ordered->is_dead())) cancel_order();
+    if (order.type == OrderType::Move && glm::distance(position, order.move_target) < order.arrive_radius) cancel_order();
+
+    if (order.type == OrderType::Move) {
+        target_troop.reset();
+        walk_toward(elapsed, order.move_target);
+        return;
+    }
+
+    if (order.type == OrderType::Attack) target_troop = ordered;
+    else determine_target();
 
     auto target = target_troop.lock();
 
@@ -74,8 +85,7 @@ void Brawler::attack()
     auto target = target_troop.lock();
     if (!target) return;
 
-    int new_health = target->get_health() - attack_damage;
-    target->set_health(new_health);
+    target->take_damage(attack_damage);
     
     if (target->is_dead())
     {
@@ -85,7 +95,6 @@ void Brawler::attack()
 
 }
 
-
 void Brawler::move_to_target(float elapsed)
 {
     auto target = target_troop.lock();
@@ -94,7 +103,11 @@ void Brawler::move_to_target(float elapsed)
         target_troop.reset();
         return;
     }
-    
+
+    walk_toward(elapsed, approach_point(position, *target));
+}
+
+void Brawler::walk_toward(float elapsed, glm::vec2 goal) {
     std::vector<glm::vec2> others;
     for (auto const &troop : World::get_world()->troops) {
         if (troop.get() == this || troop->is_dead()) continue;
@@ -102,11 +115,10 @@ void Brawler::move_to_target(float elapsed)
         others.push_back(troop->get_position());
     }
 
-    glm::vec2 wp = World::get_world()->paths.next_waypoint(position, approach_point(position, *target), others);
+    glm::vec2 wp = World::get_world()->paths.next_waypoint(position, goal, others);
     float dist = glm::distance(position, wp);
     float step = movement_speed * elapsed;
     if (dist > 0.0f) position = glm::mix(position, wp, std::min(1.0f, step / dist));
-    
 }
 
 /* @brief find the closest troop from the opposite team

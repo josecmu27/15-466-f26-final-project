@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <limits>
 
 namespace {
 
@@ -121,6 +122,10 @@ PlayMode::~PlayMode() {
 
 static const float troop_size = 0.7f;
 
+static bool troop_overlaps(glm::vec2 pos, glm::vec2 mn, glm::vec2 mx) {
+	return pos.x - troop_size <= mx.x && pos.x + troop_size >= mn.x && pos.y - troop_size <= mx.y && pos.y + troop_size >= mn.y;
+}
+
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_) {
 	window_size = window_size_;
 	if (evt.type == SDL_EVENT_MOUSE_MOTION) {
@@ -150,12 +155,58 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 				troop->set_selected(false);
 				if (troop->get_team() != Team::FRUIT) continue;
 				glm::vec2 pos = troop->get_position();
-				bool selected = pos.x - troop_size <= mx.x && pos.x + troop_size >= mn.x && pos.y - troop_size <= mx.y && pos.y + troop_size >= mn.y;
+				bool selected = troop_overlaps(pos, mn, mx);
 				troop->set_selected(selected);
 			}
 		}
 		dragging_ = false;
 		box_dragging_ = false;
+		return true;
+	}
+	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_RIGHT) {
+		mouse = glm::vec2(evt.button.x, evt.button.y);
+		World *world = World::get_world();
+		glm::vec3 hit;
+		if (mouse_to_world(hit)) {
+			glm::vec2 click = glm::vec2(hit);
+			int command_count = 0;
+			for (auto &troop : world->troops) {
+				if (troop->is_selected()) command_count++;
+			}
+			if (command_count == 0) return true;
+			std::shared_ptr<Troop> target;
+			float best = std::numeric_limits<float>::infinity();
+			for (auto &troop : world->troops) {
+				if (troop->is_dead()) continue;
+				glm::vec2 pos = troop->get_position();
+				if (troop->get_team() == Team::VEGETABLE) {
+					float dist = glm::distance(pos, click);
+					if (troop_overlaps(pos, click, click) && dist < best) {
+						best = dist;
+						target = troop;
+					}
+				}
+			}
+
+			Order order;
+			if (target) {
+				order.type = OrderType::Attack;
+				order.attack_target = target;
+			} else {
+				int row = 0;
+				int col = 0;
+				if (!world->map.world_to_cell(hit, col, row)) return true;
+				if (!world->map.is_walkable(col, row)) return true;
+				order.type = OrderType::Move;
+				order.move_target = click;
+				order.arrive_radius = 0.2f;
+			}
+			for (auto &troop : world->troops) {
+				if (troop->is_selected()) {
+					troop->give_order(order);
+				}
+			}
+		}
 		return true;
 	}
 	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_SPACE) {

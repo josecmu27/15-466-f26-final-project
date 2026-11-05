@@ -5,12 +5,24 @@
 #include <glm/glm.hpp>
 #include <vector>
 
+class Troop;
 
 enum Team {
     FRUIT, // Player
     VEGETABLE, // Enemy
     BASKET, // Player's Base
     ENEMY_BASKET // Enemy's Base
+};
+
+enum class OrderType {
+    None, Move, Attack
+};
+
+struct Order {
+    OrderType type = OrderType::None;
+    glm::vec2 move_target = glm::vec2(0.0f);
+    std::weak_ptr<Troop> attack_target;
+    float arrive_radius = 0.0f;
 };
 
 class Troop {
@@ -26,6 +38,7 @@ protected:
     float movement_speed;
     float radius;
     bool selected = false;
+    Order order;
     Team team;
 
     float walk_time = 0.0f;
@@ -44,15 +57,20 @@ public:
     virtual void attack() = 0;
     virtual void move_to_target(float elapsed) = 0;
     virtual void determine_target() = 0;
+    void give_order(Order &o) { order = o; }
+    void cancel_order() { order = Order{}; }
     virtual bool is_attacking() const { return false; }
 
     std::string get_name() const { return name; }
     Team get_team() const {return team; }
 
-
     int get_health() const { return health; }
     int get_max_health() const { return max_health; }
     void set_health(int new_health) { health = new_health; }
+    void take_damage(int damage) {
+        health -= damage;
+        if (order.type == OrderType::Move) cancel_order();
+    }
     bool is_dead() const {return health <= 0; }
     bool is_selected() const { return selected; }
     void set_selected(bool s) { selected = s; }
