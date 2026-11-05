@@ -59,6 +59,7 @@ public:
     virtual void determine_target() = 0;
     void give_order(Order &o) { order = o; }
     void cancel_order() { order = Order{}; }
+    Order get_order() { return order; }
     virtual bool is_attacking() const { return false; }
 
     std::string get_name() const { return name; }

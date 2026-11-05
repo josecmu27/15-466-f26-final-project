@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 #include <limits>
+#include <set>
+#include <utility>
 
 namespace {
 
@@ -581,6 +583,20 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 
 	if (bar_vao_ != 0) {
 		std::vector< ColorVertex > shadows;
+
+		std::set< Troop const * > attack_targets;
+		std::set< std::pair<float, float> > move_targets;
+		for (auto &troop : World::get_world()->troops) {
+			if (!troop || !troop->is_selected()) continue;
+			Order const &order = troop->get_order();
+			if (order.type == OrderType::Attack) {
+				auto target = order.attack_target.lock();
+				attack_targets.insert(target.get());
+			} else if (order.type == OrderType::Move) {
+				move_targets.insert(std::make_pair(order.move_target.x, order.move_target.y));
+			}
+		}
+
 		for (auto const &troop : World::get_world()->troops) {
 			if (!troop || troop->is_dead()) continue;
 			Team team = troop->get_team();
@@ -592,12 +608,20 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 				center = fruit_sprite_center(center, attacking);
 			} else if (team == Team::VEGETABLE) half = enemy_half_;
 			else continue;
-			if (troop->is_selected()) {
-				add_foot_shadow(shadows, center, half, glm::u8vec3(255, 215, 0));
-			} else {
-				add_foot_shadow(shadows, center, half, glm::u8vec3(18, 10, 6));
-			}
+
+			glm::u8vec3 color;
+			if (attack_targets.contains(troop.get()))
+				color = glm::u8vec3(255, 0, 0);
+			else if (troop->is_selected())
+				color = glm::u8vec3(255, 215, 0);
+			else
+				color = glm::u8vec3(18, 10, 6);
+			add_foot_shadow(shadows, center, half, color);
 		}
+		for (auto target : move_targets) {
+			add_foot_shadow(shadows, glm::vec2(target.first, target.second), glm::vec2(0.0f), glm::u8vec3(255, 0, 0));
+		}
+
 		if (!shadows.empty()) {
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
