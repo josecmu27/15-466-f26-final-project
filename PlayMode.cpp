@@ -86,6 +86,7 @@ PlayMode::PlayMode() {
                                 Team::BASKET);
 
 	World::get_world()->troops.emplace_back(basket);
+	basket_ = basket;
 
 	glm::vec2 enemy_at = 0.5f * (World::get_world()->map.enemy_base_min() + World::get_world()->map.enemy_base_max());
 	auto enemy_basket = std::make_shared<Brawler>(enemy_at, "EnemyBasket",
@@ -135,7 +136,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 		if (box_dragging_) mouse_to_world(box_end_);
 		return true;
 	}
-	if (won_) return false;
+	if (won_ || lost_) return false;
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		dragging_ = pointer_on_slot();
@@ -219,7 +220,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 }
 
 void PlayMode::update(float elapsed) {
-	if (paused_ || won_) return;
+	if (paused_ || won_ || lost_) return;
 
 	time_ += elapsed;
 	troop_spawn_timer -= elapsed;
@@ -229,6 +230,13 @@ void PlayMode::update(float elapsed) {
 	if (enemy_basket_.expired()) {
 		won_ = true;
 		dragging_ = false;
+		box_dragging_ = false;
+		return;
+	}
+	if (basket_.expired()) {
+		lost_ = true;
+		dragging_ = false;
+		box_dragging_ = false;
 		return;
 	}
 
@@ -281,6 +289,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	draw_bar();
 	draw_unit_stats();
 	if (won_) draw_victory_overlay();
+	else if (lost_) draw_defeat_overlay();
 
 	GL_ERRORS();
 }
@@ -861,6 +870,14 @@ void PlayMode::draw_unit_stats() {
 }
 
 void PlayMode::draw_victory_overlay() {
+	draw_end_overlay("VICTORY!", glm::u8vec4(255, 214, 96, 255));
+}
+
+void PlayMode::draw_defeat_overlay() {
+	draw_end_overlay("DEFEAT!", glm::u8vec4(214, 64, 48, 255));
+}
+
+void PlayMode::draw_end_overlay(std::string const &label, glm::u8vec4 color) {
 	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
 
 	glm::u8vec4 dim(12, 6, 4, 150);
@@ -886,7 +903,6 @@ void PlayMode::draw_victory_overlay() {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glUseProgram(0);
 
-	std::string const label = "VICTORY!";
 	float px_w = 2.0f / float(window_size.x);
 	float px_h = 2.0f / float(window_size.y);
 	float line_px = float(window_size.y) * 0.18f;
@@ -903,7 +919,7 @@ void PlayMode::draw_victory_overlay() {
 		// The font has one regular weight; a few offset copies make the headline read as bold.
 		for (int dy = -1; dy <= 1; ++dy) {
 			for (int dx = -1; dx <= 1; ++dx) {
-				renderer.draw_text(*title_font, label, anchor + glm::vec3(float(dx) * 1.5f * px_w, float(dy) * 1.5f * px_h, 0.0f), x_axis, y_axis, glm::u8vec4(255, 214, 96, 255));
+				renderer.draw_text(*title_font, label, anchor + glm::vec3(float(dx) * 1.5f * px_w, float(dy) * 1.5f * px_h, 0.0f), x_axis, y_axis, color);
 			}
 		}
 	}

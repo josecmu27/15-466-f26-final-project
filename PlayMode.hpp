@@ -45,13 +45,17 @@ struct PlayMode : Mode {
 	void draw_pause_overlay();
 	void draw_unit_stats();
 	void draw_victory_overlay();
+	void draw_defeat_overlay();
+	void draw_end_overlay(std::string const &label, glm::u8vec4 color);
 
 	// Freezes the battle; troops can still be placed while paused.
 	bool paused_ = false;
 
-	// World removes a basket when its health runs out, so this expiring means the player won.
+	// World removes a basket when its health runs out.
+	std::weak_ptr< Troop > basket_;
 	std::weak_ptr< Troop > enemy_basket_;
 	bool won_ = false;
+	bool lost_ = false;
 
 	GLuint troop_tex_ = 0;
 	GLuint troop_vbo_ = 0;
