@@ -70,7 +70,8 @@ PlayMode::PlayMode() {
 	mouse = glm::vec2(mx, my);
 
 
-	auto basket = std::make_shared<Brawler>(World::get_world()->map.cell_center(0, 5), "Basket", 
+	glm::vec2 basket_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
+	auto basket = std::make_shared<Brawler>(basket_at, "Basket", 
                                 1000, // Health
                                 10,   // Resource Cost
                                 25,  // Attack Damage
@@ -82,7 +83,8 @@ PlayMode::PlayMode() {
 
 	World::get_world()->troops.emplace_back(basket);
 
-	auto enemy_basket = std::make_shared<Brawler>(World::get_world()->map.cell_center(World::get_world()->map.cols() - 1, 5), "EnemyBasket",
+	glm::vec2 enemy_at = 0.5f * (World::get_world()->map.enemy_base_min() + World::get_world()->map.enemy_base_max());
+	auto enemy_basket = std::make_shared<Brawler>(enemy_at, "EnemyBasket",
                                 1000, // Health
                                 10,   // Resource Cost
                                 25,  // Attack Damage
@@ -463,6 +465,10 @@ void PlayMode::load_troop_sprite() {
 	load_sprite_png("tomato_brawler.png", enemy_tex_, enemy_uv_min_, enemy_uv_max_, enemy_half_);
 	float scale = load_frames("BlueTeam/Cherry/Walk/CherryBrawler_Walk-", walk_frames_, walk_tex_, walk_uv_min_, walk_uv_max_, walk_half_, walk_offset_, 0.0f);
 	load_frames("BlueTeam/Cherry/Attack/CherryBrawler_Attack-", attack_frames_, attack_tex_, attack_uv_min_, attack_uv_max_, attack_half_, attack_offset_, scale);
+	// The crop sits on the cell center, so the feet land on the bottom edge. Lift the body into the cell.
+	constexpr float place_lift = 0.45f;
+	walk_offset_.y += place_lift;
+	attack_offset_.y += place_lift;
 
 	glGenBuffers(1, &troop_vbo_);
 	glGenVertexArrays(1, &troop_vao_);

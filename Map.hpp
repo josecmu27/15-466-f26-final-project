@@ -56,6 +56,16 @@ struct Map {
 
 	glm::vec3 cell_center(int col, int row) const;
 
+	// Axis-aligned footprint of each 2x2 base, in world space.
+	glm::vec2 friendly_base_min() const { return friendly_base_min_; }
+	glm::vec2 friendly_base_max() const { return friendly_base_max_; }
+	glm::vec2 enemy_base_min() const { return enemy_base_min_; }
+	glm::vec2 enemy_base_max() const { return enemy_base_max_; }
+
+	// Center and half-size of a drawn basket. `enemy` selects the right-hand base.
+	glm::vec2 base_center(bool enemy) const;
+	glm::vec2 base_half() const { return base_half_; }
+
 private:
 	enum class Tile : uint8_t {
 		Grass,
@@ -102,6 +112,11 @@ private:
 	void load_base_sprite();
 	void place_river();
 	glm::vec2 base_anchor_ = glm::vec2(0.0f);
+	glm::vec2 enemy_anchor_ = glm::vec2(0.0f);
+	glm::vec2 friendly_base_min_ = glm::vec2(0.0f);
+	glm::vec2 friendly_base_max_ = glm::vec2(0.0f);
+	glm::vec2 enemy_base_min_ = glm::vec2(0.0f);
+	glm::vec2 enemy_base_max_ = glm::vec2(0.0f);
 	glm::vec2 base_half_ = glm::vec2(1.0f);
 	glm::vec2 base_uv_min_ = glm::vec2(0.0f);
 	glm::vec2 base_uv_max_ = glm::vec2(1.0f);
