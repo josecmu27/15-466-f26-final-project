@@ -16,6 +16,7 @@ public:
 
     void update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths) override;
     void attack() override;
+    bool is_attacking() const override;
     void move_to_target(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths) override;
     void determine_target(std::vector<std::shared_ptr<Troop>> &troops) override;
     void set_target(std::shared_ptr<Troop> target) { target_troop = target; }

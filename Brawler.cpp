@@ -22,6 +22,13 @@ void Brawler::update(float elapsed, std::vector<std::shared_ptr<Troop>> &troops,
 
 }   
 
+bool Brawler::is_attacking() const
+{
+    auto target = target_troop.lock();
+    if (!target || target->is_dead()) return false;
+    return glm::distance(position, target->get_position()) < attack_range;
+}
+
 void Brawler::attack()
 {
 

@@ -38,6 +38,7 @@ public:
     virtual void attack() = 0;
     virtual void move_to_target(float elapsed, std::vector<std::shared_ptr<Troop>> &troops, Pathfinder const &paths) = 0;
     virtual void determine_target(std::vector<std::shared_ptr<Troop>> &troops) = 0;
+    virtual bool is_attacking() const { return false; }
 
     std::string get_name() const { return name; }
     Team get_team() const {return team; }
