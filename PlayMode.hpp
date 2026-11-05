@@ -68,7 +68,7 @@ struct PlayMode : Mode {
 
 	static constexpr float bar_frac_ = 0.16f;
 	static constexpr int cherry_cost_ = 2;
-	int resources_ = 10;
+	int resources_ = 1000;
 	bool dragging_ = false;
 	GLuint bar_vbo_ = 0;
 	GLuint bar_vao_ = 0;
