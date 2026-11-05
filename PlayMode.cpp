@@ -109,6 +109,14 @@ PlayMode::~PlayMode() {
 	if (troop_vbo_ != 0) glDeleteBuffers(1, &troop_vbo_);
 	if (troop_tex_ != 0) glDeleteTextures(1, &troop_tex_);
 	if (enemy_tex_ != 0) glDeleteTextures(1, &enemy_tex_);
+	for (GLuint &tex : enemy_walk_tex_) {
+		if (tex != 0) glDeleteTextures(1, &tex);
+		tex = 0;
+	}
+	for (GLuint &tex : enemy_attack_tex_) {
+		if (tex != 0) glDeleteTextures(1, &tex);
+		tex = 0;
+	}
 	for (GLuint &tex : walk_tex_) {
 		if (tex != 0) glDeleteTextures(1, &tex);
 		tex = 0;
@@ -117,6 +125,16 @@ PlayMode::~PlayMode() {
 		if (tex != 0) glDeleteTextures(1, &tex);
 		tex = 0;
 	}
+	if (banana_tex_ != 0) glDeleteTextures(1, &banana_tex_);
+	for (GLuint &tex : banana_walk_tex_) {
+		if (tex != 0) glDeleteTextures(1, &tex);
+		tex = 0;
+	}
+	for (GLuint &tex : banana_attack_tex_) {
+		if (tex != 0) glDeleteTextures(1, &tex);
+		tex = 0;
+	}
+	banana_tex_ = 0;
 	if (bar_vao_ != 0) glDeleteVertexArrays(1, &bar_vao_);
 	if (bar_vbo_ != 0) glDeleteBuffers(1, &bar_vbo_);
 	troop_vao_ = troop_vbo_ = troop_tex_ = enemy_tex_ = 0;
@@ -124,6 +142,10 @@ PlayMode::~PlayMode() {
 }
 
 static const float troop_size = 0.7f;
+
+static bool is_banana_ranged(Troop const &troop) {
+	return troop.get_name() == "BananaRanged";
+}
 
 static bool troop_overlaps(glm::vec2 pos, glm::vec2 mn, glm::vec2 mx) {
 	return pos.x - troop_size <= mx.x && pos.x + troop_size >= mn.x && pos.y - troop_size <= mx.y && pos.y + troop_size >= mn.y;
@@ -264,9 +286,14 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	if (paused_) draw_pause_overlay();
 	if (dragging_ && World::get_world()->map.can_place(hover_col, hover_row)) {
 		glm::u8vec4 ghost(255, 255, 255, 170);
-		glm::vec2 ghost_half = walk_tex_[0] != 0 ? walk_half_ : troop_half_;
+		bool banana_ghost = selected_troop == TroopType::BANANA_RANGED && banana_walk_tex_[0] != 0;
+		glm::vec2 ghost_half = banana_ghost ? banana_walk_half_ : (walk_tex_[0] != 0 ? walk_half_ : troop_half_);
 		glm::vec2 ghost_at = glm::vec2(World::get_world()->map.cell_center(hover_col, hover_row));
-		if (walk_tex_[0] != 0) ghost_at += walk_offset_;
+		if (banana_ghost) ghost_at += banana_walk_offset_;
+		else if (walk_tex_[0] != 0) ghost_at += walk_offset_;
+		GLuint ghost_tex = banana_ghost ? banana_walk_tex_[0] : (walk_tex_[0] != 0 ? walk_tex_[0] : troop_tex_);
+		glm::vec2 ghost_uv_min = banana_ghost ? banana_walk_uv_min_ : (walk_tex_[0] != 0 ? walk_uv_min_ : troop_uv_min_);
+		glm::vec2 ghost_uv_max = banana_ghost ? banana_walk_uv_max_ : (walk_tex_[0] != 0 ? walk_uv_max_ : troop_uv_max_);
 		if (bar_vao_ != 0) {
 			std::vector< ColorVertex > shadow;
 			add_foot_shadow(shadow, ghost_at, ghost_half, glm::u8vec3(18, 10, 6));
@@ -282,7 +309,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			glUseProgram(0);
 		}
-		draw_sprite(clip, ghost_at, ghost_half, ghost);
+		draw_sprite(clip, ghost_at, ghost_half, ghost, ghost_tex, ghost_uv_min, ghost_uv_max);
 	}
 
 	glViewport(0, 0, (GLsizei)drawable_size.x, (GLsizei)drawable_size.y);
@@ -574,22 +601,33 @@ float PlayMode::load_frames(std::string const &prefix, int count, GLuint *tex, g
 }
 
 int PlayMode::fruit_frame(std::shared_ptr<Troop> const &troop) const {
-	if (!troop || walk_tex_[0] == 0) return 0;
+	bool banana = troop && is_banana_ranged(*troop);
+	GLuint tex0 = banana ? banana_walk_tex_[0] : walk_tex_[0];
+	int frames = banana ? banana_walk_frames_ : walk_frames_;
+	if (!troop || tex0 == 0) return 0;
 	int frame = (int)std::floor(troop->get_walk_time() * 12.0f);
-	frame %= walk_frames_;
-	if (frame < 0) frame += walk_frames_;
+	frame %= frames;
+	if (frame < 0) frame += frames;
 	return frame;
 }
 
 int PlayMode::fruit_attack_frame(std::shared_ptr<Troop> const &troop) const {
-	if (!troop || attack_tex_[0] == 0) return 0;
+	bool banana = troop && is_banana_ranged(*troop);
+	GLuint tex0 = banana ? banana_attack_tex_[0] : attack_tex_[0];
+	int frames = banana ? banana_attack_frames_ : attack_frames_;
+	if (!troop || tex0 == 0) return 0;
 	int frame = (int)std::floor(troop->get_attack_time() * 12.0f);
-	frame %= attack_frames_;
-	if (frame < 0) frame += attack_frames_;
+	frame %= frames;
+	if (frame < 0) frame += frames;
 	return frame;
 }
 
-glm::vec2 PlayMode::fruit_sprite_center(glm::vec2 pos, bool attacking) const {
+glm::vec2 PlayMode::fruit_sprite_center(glm::vec2 pos, bool attacking, bool banana) const {
+	if (banana) {
+		if (attacking && banana_attack_tex_[0] != 0) return pos + banana_attack_offset_;
+		if (banana_walk_tex_[0] != 0) return pos + banana_walk_offset_;
+		return pos;
+	}
 	if (attacking && attack_tex_[0] != 0) return pos + attack_offset_;
 	if (walk_tex_[0] != 0) return pos + walk_offset_;
 	return pos;
@@ -609,6 +647,13 @@ void PlayMode::load_troop_sprite() {
 	constexpr float place_lift = 0.45f;
 	walk_offset_.y += place_lift;
 	attack_offset_.y += place_lift;
+	banana_walk_offset_.y += place_lift;
+	banana_attack_offset_.y += place_lift;
+
+	float enemy_scale = load_frames("RedTeam/Cherry/Walk/CherryBrawler_Walk-", enemy_walk_frames_, enemy_walk_tex_, enemy_walk_uv_min_, enemy_walk_uv_max_, enemy_walk_half_, enemy_walk_offset_, 0.0f);
+	load_frames("RedTeam/Cherry/Attack/CherryBrawler_Attack-", enemy_attack_frames_, enemy_attack_tex_, enemy_attack_uv_min_, enemy_attack_uv_max_, enemy_attack_half_, enemy_attack_offset_, enemy_scale);
+	enemy_walk_offset_.y += place_lift;
+	enemy_attack_offset_.y += place_lift;
 
 	glGenBuffers(1, &troop_vbo_);
 	glGenVertexArrays(1, &troop_vao_);
@@ -663,10 +708,17 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 			glm::vec2 half(0.0f);
 			glm::vec2 center = troop->get_position();
 			if (team == Team::FRUIT) {
-				bool attacking = troop->get_pose() == 2 && attack_tex_[0] != 0;
-				half = attacking ? attack_half_ : (walk_tex_[0] != 0 ? walk_half_ : troop_half_);
-				center = fruit_sprite_center(center, attacking);
-			} else if (team == Team::VEGETABLE) half = enemy_half_;
+				bool banana = is_banana_ranged(*troop);
+				bool attacking = troop->get_pose() == 2 && (banana ? banana_attack_tex_[0] : attack_tex_[0]) != 0;
+				if (banana) half = attacking ? banana_attack_half_ : (banana_walk_tex_[0] != 0 ? banana_walk_half_ : banana_half_);
+				else half = attacking ? attack_half_ : (walk_tex_[0] != 0 ? walk_half_ : troop_half_);
+				center = fruit_sprite_center(center, attacking, banana);
+			} else if (team == Team::VEGETABLE) {
+				bool attacking = troop->get_pose() == 2 && enemy_attack_tex_[0] != 0;
+				half = attacking ? enemy_attack_half_ : (enemy_walk_tex_[0] != 0 ? enemy_walk_half_ : enemy_half_);
+				glm::vec2 offset = attacking && enemy_attack_tex_[0] != 0 ? enemy_attack_offset_ : enemy_walk_offset_;
+				if (enemy_walk_tex_[0] != 0) center += glm::vec2(-offset.x, offset.y);
+			}
 			else continue;
 
 			glm::u8vec3 color;
@@ -719,6 +771,7 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 		std::vector< SpriteVertex > verts;
 		for (auto const &troop : World::get_world()->troops) {
 			if (!troop || troop->is_dead() || troop->get_team() != team) continue;
+			if (team == Team::FRUIT && banana_walk_tex_[0] != 0 && is_banana_ranged(*troop)) continue;
 			glm::vec2 c = troop->get_position();
 			glm::vec2 bl = c - half;
 			glm::vec2 tr = c + half;
@@ -740,14 +793,16 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 		glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
 		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
 	};
-	auto draw_fruit_clip = [&](bool attacking, int frames, GLuint const *texs, glm::vec2 uv_min, glm::vec2 uv_max, glm::vec2 half, glm::vec2 offset) {
+	auto draw_fruit_clip = [&](bool attacking, int frames, GLuint const *texs, glm::vec2 uv_min, glm::vec2 uv_max, glm::vec2 half, glm::vec2 offset, bool banana) {
 		if (frames <= 0 || texs[0] == 0) return;
+		GLuint attack0 = banana ? banana_attack_tex_[0] : attack_tex_[0];
 		for (int frame = 0; frame < frames; ++frame) {
 			if (texs[frame] == 0) continue;
 			std::vector< SpriteVertex > verts;
 			for (auto const &troop : World::get_world()->troops) {
 				if (!troop || troop->is_dead() || troop->get_team() != Team::FRUIT) continue;
-				bool troop_attacking = troop->get_pose() == 2 && attack_tex_[0] != 0;
+				if (is_banana_ranged(*troop) != banana) continue;
+				bool troop_attacking = troop->get_pose() == 2 && attack0 != 0;
 				if (troop_attacking != attacking) continue;
 				int show = attacking ? fruit_attack_frame(troop) : fruit_frame(troop);
 				if (show != frame) continue;
@@ -771,12 +826,53 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 		}
 	};
 	if (walk_tex_[0] != 0) {
-		draw_fruit_clip(false, walk_frames_, walk_tex_, walk_uv_min_, walk_uv_max_, walk_half_, walk_offset_);
-		draw_fruit_clip(true, attack_frames_, attack_tex_, attack_uv_min_, attack_uv_max_, attack_half_, attack_offset_);
+		draw_fruit_clip(false, walk_frames_, walk_tex_, walk_uv_min_, walk_uv_max_, walk_half_, walk_offset_, false);
+		draw_fruit_clip(true, attack_frames_, attack_tex_, attack_uv_min_, attack_uv_max_, attack_half_, attack_offset_, false);
 	} else {
 		draw_team(Team::FRUIT, troop_tex_, troop_uv_min_, troop_uv_max_, troop_half_, false);
 	}
-	draw_team(Team::VEGETABLE, enemy_tex_, enemy_uv_min_, enemy_uv_max_, enemy_half_, true);
+	if (banana_walk_tex_[0] != 0) {
+		draw_fruit_clip(false, banana_walk_frames_, banana_walk_tex_, banana_walk_uv_min_, banana_walk_uv_max_, banana_walk_half_, banana_walk_offset_, true);
+		draw_fruit_clip(true, banana_attack_frames_, banana_attack_tex_, banana_attack_uv_min_, banana_attack_uv_max_, banana_attack_half_, banana_attack_offset_, true);
+	}
+	auto draw_enemy_clip = [&](bool attacking, int frames, GLuint const *texs, glm::vec2 uv_min, glm::vec2 uv_max, glm::vec2 half, glm::vec2 offset) {
+		if (frames <= 0 || texs[0] == 0) return;
+		for (int frame = 0; frame < frames; ++frame) {
+			if (texs[frame] == 0) continue;
+			std::vector< SpriteVertex > verts;
+			for (auto const &troop : World::get_world()->troops) {
+				if (!troop || troop->is_dead() || troop->get_team() != Team::VEGETABLE) continue;
+				bool troop_attacking = troop->get_pose() == 2 && enemy_attack_tex_[0] != 0;
+				if (troop_attacking != attacking) continue;
+				float anim_time = attacking ? troop->get_attack_time() : troop->get_walk_time();
+				int show = (int)std::floor(anim_time * 12.0f) % frames;
+				if (show < 0) show += frames;
+				if (show != frame) continue;
+				glm::vec2 c = troop->get_position() + glm::vec2(-offset.x, offset.y);
+				glm::vec2 bl = c - half;
+				glm::vec2 tr = c + half;
+				SpriteVertex quad[6] = {
+					{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(uv_max.x, uv_min.y)},
+					{glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(uv_min.x, uv_min.y)},
+					{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(uv_min.x, uv_max.y)},
+					{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(uv_max.x, uv_min.y)},
+					{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(uv_min.x, uv_max.y)},
+					{glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(uv_max.x, uv_max.y)},
+				};
+				verts.insert(verts.end(), quad, quad + 6);
+			}
+			if (verts.empty()) continue;
+			glBindTexture(GL_TEXTURE_2D, texs[frame]);
+			glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
+			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+		}
+	};
+	if (enemy_walk_tex_[0] != 0) {
+		draw_enemy_clip(false, enemy_walk_frames_, enemy_walk_tex_, enemy_walk_uv_min_, enemy_walk_uv_max_, enemy_walk_half_, enemy_walk_offset_);
+		draw_enemy_clip(true, enemy_attack_frames_, enemy_attack_tex_, enemy_attack_uv_min_, enemy_attack_uv_max_, enemy_attack_half_, enemy_attack_offset_);
+	} else {
+		draw_team(Team::VEGETABLE, enemy_tex_, enemy_uv_min_, enemy_uv_max_, enemy_half_, true);
+	}
 
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -806,12 +902,21 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 			int hp = troop->get_health();
 			if (max_hp <= 0 || hp >= max_hp) continue;
 			float filled = std::clamp(float(hp) / float(max_hp), 0.0f, 1.0f);
-			bool attacking = team == Team::FRUIT && troop->get_pose() == 2 && attack_tex_[0] != 0;
+			bool banana = team == Team::FRUIT && is_banana_ranged(*troop);
+			bool enemy_attacking = team == Team::VEGETABLE && troop->get_pose() == 2 && enemy_attack_tex_[0] != 0;
+			bool attacking = banana ? troop->get_pose() == 2 && banana_attack_tex_[0] != 0
+				: team == Team::FRUIT && troop->get_pose() == 2 && attack_tex_[0] != 0;
 			glm::vec2 half = walk_tex_[0] != 0 ? walk_half_ : troop_half_;
-			if (attacking) half = attack_half_;
-			else if (team == Team::VEGETABLE) half = enemy_half_;
+			if (banana) half = attacking ? banana_attack_half_ : (banana_walk_tex_[0] != 0 ? banana_walk_half_ : banana_half_);
+			else if (attacking) half = attack_half_;
+			else if (team == Team::VEGETABLE) half = enemy_attacking ? enemy_attack_half_ : (enemy_walk_tex_[0] != 0 ? enemy_walk_half_ : enemy_half_);
 			else if (team == Team::BASKET || team == Team::ENEMY_BASKET) half = glm::vec2(1.6f);
-			glm::vec2 c = team == Team::FRUIT ? fruit_sprite_center(troop->get_position(), attacking) : troop->get_position();
+			glm::vec2 c = troop->get_position();
+			if (team == Team::FRUIT) c = fruit_sprite_center(c, attacking, banana);
+			else if (team == Team::VEGETABLE && enemy_walk_tex_[0] != 0) {
+				glm::vec2 offset = enemy_attacking ? enemy_attack_offset_ : enemy_walk_offset_;
+				c += glm::vec2(-offset.x, offset.y);
+			}
 			float width = std::max(half.x * 1.55f, 0.9f);
 			float height = 0.14f;
 			float y = c.y + half.y + 0.08f;
@@ -843,10 +948,7 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 	glDisable(GL_BLEND);
 }
 
-void PlayMode::draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color) {
-	GLuint tex = walk_tex_[0] != 0 ? walk_tex_[0] : troop_tex_;
-	glm::vec2 uv_min = walk_tex_[0] != 0 ? walk_uv_min_ : troop_uv_min_;
-	glm::vec2 uv_max = walk_tex_[0] != 0 ? walk_uv_max_ : troop_uv_max_;
+void PlayMode::draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color, GLuint tex, glm::vec2 uv_min, glm::vec2 uv_max) {
 	if (tex == 0 || troop_vao_ == 0) return;
 	struct SpriteVertex {
 		glm::vec3 Position;
@@ -1054,18 +1156,24 @@ void PlayMode::draw_bar() {
 	float side = place.side;
 	auto ndc_x = [&](float x) { return (x / float(window_size.x)) * 2.0f - 1.0f; };
 	auto ndc_y = [&](float y) { return 1.0f - (y / float(window_size.y)) * 2.0f; };
-	float sx0 = ndc_x(place.slot_x);
-	float sx1 = ndc_x(place.slot_x + side);
 	float sy0 = ndc_y(place.slot_y + side);
 	float sy1 = ndc_y(place.slot_y);
-	ColorVertex well[6] = {
-		{glm::vec3(sx0, sy0, 0.0f), slot},
-		{glm::vec3(sx1, sy0, 0.0f), slot},
-		{glm::vec3(sx1, sy1, 0.0f), slot},
-		{glm::vec3(sx0, sy0, 0.0f), slot},
-		{glm::vec3(sx1, sy1, 0.0f), slot},
-		{glm::vec3(sx0, sy1, 0.0f), slot},
+	auto slot_well = [&](float slot_x) {
+		float sx0 = ndc_x(slot_x);
+		float sx1 = ndc_x(slot_x + side);
+		ColorVertex well[6] = {
+			{glm::vec3(sx0, sy0, 0.0f), slot},
+			{glm::vec3(sx1, sy0, 0.0f), slot},
+			{glm::vec3(sx1, sy1, 0.0f), slot},
+			{glm::vec3(sx0, sy0, 0.0f), slot},
+			{glm::vec3(sx1, sy1, 0.0f), slot},
+			{glm::vec3(sx0, sy1, 0.0f), slot},
+		};
+		return std::vector< ColorVertex >(well, well + 6);
 	};
+	std::vector< ColorVertex > wells = slot_well(place.slot_x);
+	std::vector< ColorVertex > banana_well = slot_well(place.slot_x2);
+	wells.insert(wells.end(), banana_well.begin(), banana_well.end());
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
@@ -1075,17 +1183,33 @@ void PlayMode::draw_bar() {
 	glBindVertexArray(bar_vao_);
 	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
 	glDrawArrays(GL_TRIANGLES, 0, 12);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(well), well, GL_DYNAMIC_DRAW);
-	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glBufferData(GL_ARRAY_BUFFER, wells.size() * sizeof(ColorVertex), wells.data(), GL_DYNAMIC_DRAW);
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)wells.size());
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glUseProgram(0);
 
 	float inset = side * 0.08f;
 	glm::vec2 icon_center(ndc_x(place.slot_x + side * 0.5f), ndc_y(place.slot_y + side * 0.5f));
-	// glm::vec2 icon2_center(ndc_x(place.slot_x2 + side * 0.5f), ndc_y(place.slot_y + side * 0.5f));
+	glm::vec2 icon2_center(ndc_x(place.slot_x2 + side * 0.5f), ndc_y(place.slot_y + side * 0.5f));
 	glm::vec2 icon_half((side - inset * 2.0f) / float(window_size.x), (side - inset * 2.0f) / float(window_size.y));
-	draw_sprite(glm::mat4(1.0f), icon_center, icon_half, glm::u8vec4(255, 255, 255, 255));
+	// Fit a cropped sprite inside a square slot without stretching it.
+	auto fit_slot = [&](glm::vec2 sprite_half, float slot_px) {
+		float aspect = sprite_half.x / std::max(sprite_half.y, 1e-4f);
+		float icon_w = slot_px;
+		float icon_h = slot_px;
+		if (aspect >= 1.0f) icon_h = slot_px / aspect;
+		else icon_w = slot_px * aspect;
+		return glm::vec2(icon_w / float(window_size.x), icon_h / float(window_size.y));
+	};
+	GLuint cherry_tex = walk_tex_[0] != 0 ? walk_tex_[0] : troop_tex_;
+	glm::vec2 cherry_uv_min = walk_tex_[0] != 0 ? walk_uv_min_ : troop_uv_min_;
+	glm::vec2 cherry_uv_max = walk_tex_[0] != 0 ? walk_uv_max_ : troop_uv_max_;
+	draw_sprite(glm::mat4(1.0f), icon_center, icon_half, glm::u8vec4(255, 255, 255, 255), cherry_tex, cherry_uv_min, cherry_uv_max);
+	if (banana_walk_tex_[0] != 0) {
+		glm::vec2 banana_icon_half = fit_slot(banana_walk_half_, side - inset * 2.0f);
+		draw_sprite(glm::mat4(1.0f), icon2_center, banana_icon_half, glm::u8vec4(255, 255, 255, 255), banana_walk_tex_[0], banana_walk_uv_min_, banana_walk_uv_max_);
+	}
 	
 
 	auto ndc_w = [&](float px) { return px / float(window_size.x) * 2.0f; };
@@ -1130,7 +1254,11 @@ void PlayMode::draw_bar() {
 
 	if (dragging_ && !World::get_world()->map.can_place(hover_col, hover_row)) {
 		glm::vec2 cursor(ndc_x(mouse.x), ndc_y(mouse.y));
-		glm::vec2 ghost_half(side / float(window_size.x), side / float(window_size.y));
-		draw_sprite(glm::mat4(1.0f), cursor, ghost_half, glm::u8vec4(255, 255, 255, 210));
+		bool banana_ghost = selected_troop == TroopType::BANANA_RANGED && banana_walk_tex_[0] != 0;
+		glm::vec2 ghost_half = banana_ghost ? fit_slot(banana_walk_half_, side) : glm::vec2(side / float(window_size.x), side / float(window_size.y));
+		GLuint ghost_tex = banana_ghost ? banana_walk_tex_[0] : (walk_tex_[0] != 0 ? walk_tex_[0] : troop_tex_);
+		glm::vec2 ghost_uv_min = banana_ghost ? banana_walk_uv_min_ : (walk_tex_[0] != 0 ? walk_uv_min_ : troop_uv_min_);
+		glm::vec2 ghost_uv_max = banana_ghost ? banana_walk_uv_max_ : (walk_tex_[0] != 0 ? walk_uv_max_ : troop_uv_max_);
+		draw_sprite(glm::mat4(1.0f), cursor, ghost_half, glm::u8vec4(255, 255, 255, 210), ghost_tex, ghost_uv_min, ghost_uv_max);
 	}
 }
