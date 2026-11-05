@@ -94,6 +94,7 @@ PlayMode::PlayMode() {
 								3.0f, // Radius
                                 Team::ENEMY_BASKET);
 	World::get_world()->troops.emplace_back(enemy_basket);
+	enemy_basket_ = enemy_basket;
 
 	load_troop_sprite();
 }
@@ -123,6 +124,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 		mouse = glm::vec2(evt.motion.x, evt.motion.y);
 		return true;
 	}
+	if (won_) return false;
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		dragging_ = pointer_on_slot();
@@ -145,12 +147,18 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 }
 
 void PlayMode::update(float elapsed) {
-	if (paused_) return;
+	if (paused_ || won_) return;
 
 	time_ += elapsed;
 	troop_spawn_timer -= elapsed;
 
 	World::get_world()->update(elapsed);
+
+	if (enemy_basket_.expired()) {
+		won_ = true;
+		dragging_ = false;
+		return;
+	}
 
 	if (troop_spawn_timer < 0.0f){
 		spawn_vegetable_troop();
@@ -200,6 +208,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	glViewport(0, 0, (GLsizei)drawable_size.x, (GLsizei)drawable_size.y);
 	draw_bar();
 	draw_unit_stats();
+	if (won_) draw_victory_overlay();
 
 	GL_ERRORS();
 }
@@ -748,6 +757,56 @@ void PlayMode::draw_unit_stats() {
 		};
 		draw_line("FRUIT " + std::to_string(fruits), 0, glm::u8vec4(255, 236, 196, 255));
 		draw_line("VEG " + std::to_string(vegetables), 1, glm::u8vec4(255, 170, 140, 255));
+	}
+	glDisable(GL_BLEND);
+}
+
+void PlayMode::draw_victory_overlay() {
+	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
+
+	glm::u8vec4 dim(12, 6, 4, 150);
+	ColorVertex screen[6] = {
+		{glm::vec3(-1.0f, -1.0f, 0.0f), dim},
+		{glm::vec3(1.0f, -1.0f, 0.0f), dim},
+		{glm::vec3(1.0f, 1.0f, 0.0f), dim},
+		{glm::vec3(-1.0f, -1.0f, 0.0f), dim},
+		{glm::vec3(1.0f, 1.0f, 0.0f), dim},
+		{glm::vec3(-1.0f, 1.0f, 0.0f), dim},
+	};
+
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(screen), screen, GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+
+	std::string const label = "VICTORY!";
+	float px_w = 2.0f / float(window_size.x);
+	float px_h = 2.0f / float(window_size.y);
+	float line_px = float(window_size.y) * 0.18f;
+	float scale = line_px / float(title_font->pixel_height);
+	glm::vec3 x_axis(scale * px_w, 0.0f, 0.0f);
+	glm::vec3 y_axis(0.0f, scale * px_h, 0.0f);
+	float advance = 0.0f;
+	title_font->layout(label, &advance);
+	glm::vec3 anchor(-0.5f * advance * scale * px_w, -kFontCapCenter * line_px * px_h, 0.0f);
+
+	{
+		TextRenderer renderer(glm::mat4(1.0f));
+		renderer.draw_text(*title_font, label, anchor + glm::vec3(4.0f * px_w, -4.0f * px_h, 0.0f), x_axis, y_axis, glm::u8vec4(27, 16, 18, 255));
+		// The font has one regular weight; a few offset copies make the headline read as bold.
+		for (int dy = -1; dy <= 1; ++dy) {
+			for (int dx = -1; dx <= 1; ++dx) {
+				renderer.draw_text(*title_font, label, anchor + glm::vec3(float(dx) * 1.5f * px_w, float(dy) * 1.5f * px_h, 0.0f), x_axis, y_axis, glm::u8vec4(255, 214, 96, 255));
+			}
+		}
 	}
 	glDisable(GL_BLEND);
 }
