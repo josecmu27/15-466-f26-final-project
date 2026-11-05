@@ -69,6 +69,7 @@ PlayMode::PlayMode() {
 	SDL_GetMouseState(&mx, &my);
 	mouse = glm::vec2(mx, my);
 
+	World::get_world()->play_mode = this;
 
 	auto basket = std::make_shared<Brawler>(World::get_world()->map.cell_center(0, 5), "Basket", 
                                 1000, // Health
@@ -119,11 +120,14 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 	window_size = window_size_;
 	if (evt.type == SDL_EVENT_MOUSE_MOTION) {
 		mouse = glm::vec2(evt.motion.x, evt.motion.y);
+		if (box_dragging_) mouse_to_world(box_end_);
 		return true;
 	}
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		dragging_ = pointer_on_slot();
+		box_dragging_ = !dragging_ && mouse_to_world(box_start_);
+		box_end_ = box_start_;
 		return true;
 	}
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP && evt.button.button == SDL_BUTTON_LEFT) {
@@ -133,6 +137,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 			if (mouse_to_world(hit)) place_troop(glm::vec2(hit));
 		}
 		dragging_ = false;
+		box_dragging_ = false;
 		return true;
 	}
 	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_SPACE) {
@@ -278,6 +283,7 @@ bool PlayMode::mouse_to_world(glm::vec3 &hit) const {
 void PlayMode::refresh_hover() {
 	hover_col = -1;
 	hover_row = -1;
+	if (!dragging_) return;
 	glm::vec3 hit;
 	if (!mouse_to_world(hit)) return;
 	int col = 0;

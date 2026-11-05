@@ -5,6 +5,8 @@
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
 #include "data_path.hpp"
+#include "World.hpp"
+#include "PlayMode.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -263,6 +265,21 @@ void Map::draw(glm::mat4 const &clip_from_world, float time, int hover_col, int 
 		glm::u8vec4 wash = open ? glm::u8vec4(70, 140, 60, 90) : glm::u8vec4(176, 48, 40, 90);
 		glm::u8vec4 line = open ? glm::u8vec4(28, 70, 24, 255) : glm::u8vec4(120, 24, 22, 255);
 		auto box = shape_round_rect(c - glm::vec2(h), c + glm::vec2(h), 0.12f, 3, 1, 0.0f);
+		Mesh mark;
+		paint_polygon(mark, box, wash);
+		std::vector< glm::vec2 > edge = boil_points(box, 0.02f, frame, 90);
+		paint_ribbon(mark, edge, 0.07f, line, true);
+		upload(frame_vbo_, frame_vao_, mark);
+		draw_uploaded(frame_vao_, (GLuint)mark.size(), clip_from_world);
+	}
+
+	PlayMode *play_mode = World::get_world()->play_mode;
+	if (play_mode->box_dragging_) {
+		glm::vec2 mn = (glm::min(glm::vec2(play_mode->box_start_), glm::vec2(play_mode->box_end_)));
+		glm::vec2 mx = (glm::max(glm::vec2(play_mode->box_start_), glm::vec2(play_mode->box_end_)));
+		glm::u8vec4 wash = glm::u8vec4(70, 140, 60, 90);
+		glm::u8vec4 line = glm::u8vec4(28, 70, 24, 255);
+		auto box = shape_round_rect(mn, mx, 0.12f, 3, 1, 0.0f);
 		Mesh mark;
 		paint_polygon(mark, box, wash);
 		std::vector< glm::vec2 > edge = boil_points(box, 0.02f, frame, 90);

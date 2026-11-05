@@ -75,6 +75,9 @@ struct PlayMode : Mode {
 	static constexpr int cherry_cost_ = 2;
 	int resources_ = 1000;
 	bool dragging_ = false;
+	bool box_dragging_ = false;
+	glm::vec3 box_start_ = glm::vec3(0.0f);
+	glm::vec3 box_end_ = glm::vec3(0.0f);
 	GLuint bar_vbo_ = 0;
 	GLuint bar_vao_ = 0;
 
