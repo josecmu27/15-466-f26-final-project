@@ -437,6 +437,8 @@ void Map::load_base_sprite() {
 	glm::vec2 block_max(cell_center(base_col0 + kBaseCols - 1, base_row0));
 	block_min -= half_tile;
 	block_max += half_tile;
+	friendly_base_min_ = block_min;
+	friendly_base_max_ = block_max;
 	base_anchor_ = 0.5f * (block_min + block_max);
 
 	float aspect = float(max_x - min_x + 1) / float(max_y - min_y + 1);
@@ -455,7 +457,10 @@ void Map::load_base_sprite() {
 	glm::vec2 enemy_block_max(cell_center(enemy_col0 + kBaseCols - 1, base_row0));
 	enemy_block_min -= half_tile;
 	enemy_block_max += half_tile;
-	glm::vec2 enemy_anchor = 0.5f * (enemy_block_min + enemy_block_max);
+	enemy_base_min_ = enemy_block_min;
+	enemy_base_max_ = enemy_block_max;
+	enemy_anchor_ = 0.5f * (enemy_block_min + enemy_block_max);
+	glm::vec2 enemy_anchor = enemy_anchor_;
 
 	auto mark_base = [&](int col0) {
 		for (int row = base_row0; row < base_row0 + kBaseRows; ++row) {
@@ -657,8 +662,8 @@ void Map::rebuild() {
 			glm::vec2 b(cell_center(c1, row));
 			Deck deck;
 			deck.row = row;
-			deck.mn = glm::vec2(a.x - half_tile - 0.42f, a.y - half_tile * 0.78f);
-			deck.mx = glm::vec2(b.x + half_tile + 0.42f, a.y + half_tile * 0.78f);
+			deck.mn = glm::vec2(a.x - half_tile - 0.42f, a.y - half_tile * 1.15f);
+			deck.mx = glm::vec2(b.x + half_tile + 0.42f, a.y + half_tile * 1.15f);
 			deck.y0 = deck.mn.y;
 			deck.y1 = deck.mx.y;
 			decks.push_back(deck);
@@ -683,8 +688,8 @@ void Map::rebuild() {
 			auto outline = shape_round_rect(deck.mn, deck.mx, 0.12f, 2, 70 + deck.row, 0.02f);
 			paint_polygon(backdrop_, outline, wood);
 			add_stroke(outline, 0.08f, kInk, 0.02f, 80 + deck.row, true);
-			for (int plank = 0; plank < 4; ++plank) {
-				float y = glm::mix(deck.mn.y + 0.12f, deck.mx.y - 0.12f, (float(plank) + 0.5f) / 4.0f);
+			for (int plank = 0; plank < 6; ++plank) {
+				float y = glm::mix(deck.mn.y + 0.12f, deck.mx.y - 0.12f, (float(plank) + 0.5f) / 6.0f);
 				add_stroke(
 					{glm::vec2(deck.mn.x + 0.12f, y), glm::vec2(deck.mx.x - 0.12f, y)},
 					0.045f, wood_dark, 0.012f, 90 + deck.row * 4 + plank, false

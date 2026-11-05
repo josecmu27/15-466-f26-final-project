@@ -1,17 +1,56 @@
 #include "Brawler.hpp"
 #include "World.hpp"
 
+namespace {
+
+bool is_basket(Team team) {
+	return team == Team::BASKET || team == Team::ENEMY_BASKET;
+}
+
+void basket_rect(Team team, glm::vec2 &mn, glm::vec2 &mx) {
+	Map const &map = World::get_world()->map;
+	if (team == Team::BASKET) {
+		mn = map.friendly_base_min();
+		mx = map.friendly_base_max();
+	} else {
+		mn = map.enemy_base_min();
+		mx = map.enemy_base_max();
+	}
+}
+
+// Distance to a basket is distance to its footprint, so a unit on the near edge is in range.
+float distance_to(glm::vec2 from, Troop const &troop) {
+	if (!is_basket(troop.get_team())) return glm::distance(from, troop.get_position());
+	glm::vec2 mn, mx;
+	basket_rect(troop.get_team(), mn, mx);
+	return glm::distance(from, glm::clamp(from, mn, mx));
+}
+
+// A point just inside the near face, so pathfinding heads for the side the unit is on.
+glm::vec2 approach_point(glm::vec2 from, Troop const &troop) {
+	if (!is_basket(troop.get_team())) return troop.get_position();
+	glm::vec2 mn, mx;
+	basket_rect(troop.get_team(), mn, mx);
+	glm::vec2 q = glm::clamp(from, mn, mx);
+	glm::vec2 inward = 0.5f * (mn + mx) - q;
+	float len = glm::length(inward);
+	if (len > 1e-4f) q += inward / len * 0.05f;
+	return q;
+}
+
+}
+
 void Brawler::update(float elapsed)
 {
     if (team == Team::BASKET || team == Team::ENEMY_BASKET) return;
-
-    auto target = target_troop.lock();
 
     attack_timer -= elapsed;
 
     determine_target();
 
-    if (target && glm::distance(position, target->get_position()) < attack_range){
+    auto target = target_troop.lock();
+
+    if (target && distance_to(position, *target) < attack_range){
         if (attack_timer < 0.0f){
             attack();
             attack_timer = attack_rate;
@@ -27,7 +66,7 @@ bool Brawler::is_attacking() const
 {
     auto target = target_troop.lock();
     if (!target || target->is_dead()) return false;
-    return glm::distance(position, target->get_position()) < attack_range;
+    return distance_to(position, *target) < attack_range;
 }
 
 void Brawler::attack()
@@ -59,10 +98,11 @@ void Brawler::move_to_target(float elapsed)
     std::vector<glm::vec2> others;
     for (auto const &troop : World::get_world()->troops) {
         if (troop.get() == this || troop->is_dead()) continue;
+        if (is_basket(troop->get_team())) continue;
         others.push_back(troop->get_position());
     }
 
-    glm::vec2 wp = World::get_world()->paths.next_waypoint(position, target->get_position(), others);
+    glm::vec2 wp = World::get_world()->paths.next_waypoint(position, approach_point(position, *target), others);
     float dist = glm::distance(position, wp);
     float step = movement_speed * elapsed;
     if (dist > 0.0f) position = glm::mix(position, wp, std::min(1.0f, step / dist));
