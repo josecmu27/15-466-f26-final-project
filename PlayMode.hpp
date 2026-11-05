@@ -34,11 +34,11 @@ struct PlayMode : Mode {
 	void place_troop(glm::vec2 spawn_pos);
 	void load_troop_sprite();
 	void load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half);
-// px_scale <= 0 picks a scale that makes this strip 1.7 units tall, and returns that scale.
-  float load_frames(std::string const &prefix, int count, GLuint *tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, glm::vec2 &offset, float px_scale);
-  int fruit_frame(std::shared_ptr<Troop> const &troop) const;
-  int fruit_attack_frame(std::shared_ptr<Troop> const &troop) const;
-  glm::vec2 fruit_sprite_center(glm::vec2 pos, bool attacking) const;
+	// px_scale <= 0 picks a scale that makes this strip 1.7 units tall, and returns that scale.
+	float load_frames(std::string const &prefix, int count, GLuint *tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, glm::vec2 &offset, float px_scale);
+	int fruit_frame(std::shared_ptr<Troop> const &troop) const;
+	int fruit_attack_frame(std::shared_ptr<Troop> const &troop) const;
+	glm::vec2 fruit_sprite_center(glm::vec2 pos, bool attacking) const;
 	void draw_troops(glm::mat4 const &clip_from_world);
 	void draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color);
 	void draw_bar();

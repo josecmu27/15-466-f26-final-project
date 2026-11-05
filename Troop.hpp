@@ -28,6 +28,8 @@ protected:
     Team team;
 
     float walk_time = 0.0f;
+    float attack_time = 0.0f;
+    unsigned char pose = 1; // 1 = walk, 2 = attack
     
 public:
     Troop(glm::vec2 position_, std::string name_, int health_, int cost_, int damage_,
@@ -54,6 +56,11 @@ public:
 
     float get_walk_time() const { return walk_time; }
     void add_walk_time(float elapsed ) { walk_time += elapsed; }
+    float get_attack_time() const { return attack_time; }
+    void add_attack_time(float elapsed) { attack_time += elapsed; }
+    void reset_attack_time() { attack_time = 0.0f; }
+    unsigned char get_pose() const { return pose; }
+    void set_pose(unsigned char next) { pose = next; }
 
     glm::vec2 get_position() const { return position; }
     void set_position(glm::vec2& new_position) {position = new_position;}

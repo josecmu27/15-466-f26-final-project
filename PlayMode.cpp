@@ -148,11 +148,7 @@ void PlayMode::update(float elapsed) {
 	time_ += elapsed;
 	troop_spawn_timer -= elapsed;
 
-	glm::vec2 left(World::get_world()->map.bounds_min());
-	glm::vec2 right(World::get_world()->map.bounds_max());
-
 	World::get_world()->update(elapsed);
-
 
 	if (troop_spawn_timer < 0.0f){
 		spawn_vegetable_troop();
@@ -175,12 +171,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	World::get_world()->map.draw(clip, time_, hover_col, hover_row, {});
 	draw_troops(clip);
 	World::get_world()->map.draw_film(glm::mat4(1.0f), time_);
-  
 	if (paused_) draw_pause_overlay();
 	if (dragging_ && World::get_world()->map.can_place(hover_col, hover_row)) {
 		glm::u8vec4 ghost(255, 255, 255, 170);
 		glm::vec2 ghost_half = walk_tex_[0] != 0 ? walk_half_ : troop_half_;
-		glm::vec2 ghost_at = glm::vec2(map.cell_center(hover_col, hover_row));
+		glm::vec2 ghost_at = glm::vec2(World::get_world()->map.cell_center(hover_col, hover_row));
 		if (walk_tex_[0] != 0) ghost_at += walk_offset_;
 		if (bar_vao_ != 0) {
 			std::vector< ColorVertex > shadow;
@@ -449,9 +444,9 @@ int PlayMode::fruit_frame(std::shared_ptr<Troop> const &troop) const {
 	return frame;
 }
 
-int PlayMode::fruit_attack_frame(size_t index) const {
-	if (index >= attack_time_.size() || attack_tex_[0] == 0) return 0;
-	int frame = (int)std::floor(attack_time_[index] * 12.0f);
+int PlayMode::fruit_attack_frame(std::shared_ptr<Troop> const &troop) const {
+	if (!troop || attack_tex_[0] == 0) return 0;
+	int frame = (int)std::floor(troop->get_attack_time() * 12.0f);
 	frame %= attack_frames_;
 	if (frame < 0) frame += attack_frames_;
 	return frame;
@@ -500,14 +495,13 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 
 	if (bar_vao_ != 0) {
 		std::vector< ColorVertex > shadows;
-		for (size_t i = 0; i < troops.size(); ++i) {
-			auto const &troop = troops[i];
+		for (auto const &troop : World::get_world()->troops) {
 			if (!troop || troop->is_dead()) continue;
 			Team team = troop->get_team();
 			glm::vec2 half(0.0f);
 			glm::vec2 center = troop->get_position();
 			if (team == Team::FRUIT) {
-				bool attacking = i < pose_.size() && pose_[i] == 2 && attack_tex_[0] != 0;
+				bool attacking = troop->get_pose() == 2 && attack_tex_[0] != 0;
 				half = attacking ? attack_half_ : (walk_tex_[0] != 0 ? walk_half_ : troop_half_);
 				center = fruit_sprite_center(center, attacking);
 			} else if (team == Team::VEGETABLE) half = enemy_half_;
@@ -572,36 +566,34 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 		glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
 		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
 	};
-  auto draw_fruit_clip = [&](bool attacking, int frames, GLuint const *texs, glm::vec2 uv_min, glm::vec2 uv_max, glm::vec2 half, glm::vec2 offset) {
-	if (frames <= 0 || texs[0] == 0) return;
-	for (int frame = 0; frame < frames; ++frame) {
-		if (texs[frame] == 0) continue;
-		std::vector< SpriteVertex > verts;
-		for (auto const &troop : World::get_world()->troops) {
-			if (!troop || troop->is_dead() || troop->get_team() != Team::FRUIT) continue;
-			bool troop_attacking = troop->get_pose() == 2 && attack_tex_[0] != 0;
-			if (troop_attacking != attacking) continue;
-			int show = attacking ? fruit_attack_frame(troop) : fruit_frame(troop);
-			if (show != frame) continue;
-			glm::vec2 c = troop->get_position() + offset;
-			glm::vec2 bl = c - half;
-			glm::vec2 tr = c + half;
-			SpriteVertex quad[6] = {
-				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(uv_min.x, uv_min.y)},
-				{glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(uv_max.x, uv_min.y)},
-				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(uv_max.x, uv_max.y)},
-				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(uv_min.x, uv_min.y)},
-				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(uv_max.x, uv_max.y)},
-				{glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(uv_min.x, uv_max.y)},
-			};
-			verts.insert(verts.end(), quad, quad + 6);
-		}
-		if (verts.empty()) continue;
-		glBindTexture(GL_TEXTURE_2D, texs[frame]);
-		glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
-		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
-	}
-};
+	auto draw_fruit_clip = [&](bool attacking, int frames, GLuint const *texs, glm::vec2 uv_min, glm::vec2 uv_max, glm::vec2 half, glm::vec2 offset) {
+		if (frames <= 0 || texs[0] == 0) return;
+		for (int frame = 0; frame < frames; ++frame) {
+			if (texs[frame] == 0) continue;
+			std::vector< SpriteVertex > verts;
+			for (auto const &troop : World::get_world()->troops) {
+				if (!troop || troop->is_dead() || troop->get_team() != Team::FRUIT) continue;
+				bool troop_attacking = troop->get_pose() == 2 && attack_tex_[0] != 0;
+				if (troop_attacking != attacking) continue;
+				int show = attacking ? fruit_attack_frame(troop) : fruit_frame(troop);
+				if (show != frame) continue;
+				glm::vec2 c = troop->get_position() + offset;
+				glm::vec2 bl = c - half;
+				glm::vec2 tr = c + half;
+				SpriteVertex quad[6] = {
+					{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(uv_min.x, uv_min.y)},
+					{glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(uv_max.x, uv_min.y)},
+					{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(uv_max.x, uv_max.y)},
+					{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(uv_min.x, uv_min.y)},
+					{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(uv_max.x, uv_max.y)},
+					{glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(uv_min.x, uv_max.y)},
+				};
+				verts.insert(verts.end(), quad, quad + 6);
+			}
+			if (verts.empty()) continue;
+			glBindTexture(GL_TEXTURE_2D, texs[frame]);
+			glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
+			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
 		}
 	};
 	if (walk_tex_[0] != 0) {
@@ -640,7 +632,7 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 			int hp = troop->get_health();
 			if (max_hp <= 0 || hp >= max_hp) continue;
 			float filled = std::clamp(float(hp) / float(max_hp), 0.0f, 1.0f);
-			bool attacking = team == Team::FRUIT && i < pose_.size() && pose_[i] == 2 && attack_tex_[0] != 0;
+			bool attacking = team == Team::FRUIT && troop->get_pose() == 2 && attack_tex_[0] != 0;
 			glm::vec2 half = walk_tex_[0] != 0 ? walk_half_ : troop_half_;
 			if (attacking) half = attack_half_;
 			else if (team == Team::VEGETABLE) half = enemy_half_;
@@ -721,7 +713,7 @@ void PlayMode::draw_unit_stats() {
 
 	int fruits = 0;
 	int vegetables = 0;
-	for (auto const &troop : troops) {
+	for (auto const &troop : World::get_world()->troops) {
 		if (!troop || troop->is_dead()) continue;
 		if (troop->get_team() == Team::FRUIT) ++fruits;
 		else if (troop->get_team() == Team::VEGETABLE) ++vegetables;

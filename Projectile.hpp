@@ -10,5 +10,6 @@ protected:
     glm::vec2 velocity;
     float damage;
 
+public:
     void update(float elapsed);
-}
+};

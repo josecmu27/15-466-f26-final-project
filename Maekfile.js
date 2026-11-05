@@ -165,7 +165,8 @@ const game_names = [
 	maek.CPP('Brawler.cpp'),
 	maek.CPP('Pathfinder.cpp'),
 	maek.CPP('Map.cpp'),
-	maek.CPP('World.cpp')
+	maek.CPP('World.cpp'),
+	maek.CPP('Projectile.cpp')
 ];
 
 const common_names = [
