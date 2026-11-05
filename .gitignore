@@ -15,3 +15,5 @@ scenes/show-meshes*
 scenes/show-scene*
 *.blend[0-9]
 maek-cache.json
+dist/README-harfbuzz.txt
+dist/README-freetype.txt
