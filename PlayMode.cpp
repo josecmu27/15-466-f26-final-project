@@ -2,7 +2,8 @@
 
 #include "ColorProgram.hpp"
 #include "ColorTextureProgram.hpp"
-#include "DrawLines.hpp"
+#include "GameFonts.hpp"
+#include "TextRenderer.hpp"
 #include "data_path.hpp"
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
@@ -125,10 +126,16 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 		dragging_ = false;
 		return true;
 	}
+	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_SPACE) {
+		paused_ = !paused_;
+		return true;
+	}
 	return false;
 }
 
 void PlayMode::update(float elapsed) {
+	if (paused_) return;
+
 	time_ += elapsed;
 	troop_spawn_timer -= elapsed;
 
@@ -170,6 +177,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	map.draw(clip, time_, hover_col, hover_row, {});
 	draw_troops(clip);
 	map.draw_film(glm::mat4(1.0f), time_);
+	if (paused_) draw_pause_overlay();
 	if (dragging_ && map.can_place(hover_col, hover_row)) {
 		glm::u8vec4 ghost(255, 255, 255, 170);
 		glm::vec2 ghost_half = walk_tex_[0] != 0 ? walk_half_ : troop_half_;
@@ -178,6 +186,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 
 	glViewport(0, 0, (GLsizei)drawable_size.x, (GLsizei)drawable_size.y);
 	draw_bar();
+	draw_unit_stats();
 
 	GL_ERRORS();
 }
@@ -629,6 +638,92 @@ void PlayMode::draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 ha
 	glDisable(GL_BLEND);
 }
 
+// Counts living fighters on each side; the baskets are bases, so they aren't included.
+void PlayMode::draw_unit_stats() {
+	if (window_size.x == 0 || window_size.y == 0) return;
+
+	int fruits = 0;
+	int vegetables = 0;
+	for (auto const &troop : troops) {
+		if (!troop || troop->is_dead()) continue;
+		if (troop->get_team() == Team::FRUIT) ++fruits;
+		else if (troop->get_team() == Team::VEGETABLE) ++vegetables;
+	}
+
+	float px_w = 2.0f / float(window_size.x);
+	float px_h = 2.0f / float(window_size.y);
+	float line_px = float(window_size.y) * 0.04f;
+	float margin_px = line_px * 0.5f;
+	float scale = line_px / float(ui_font->pixel_height);
+	glm::vec3 x_axis(scale * px_w, 0.0f, 0.0f);
+	glm::vec3 y_axis(0.0f, scale * px_h, 0.0f);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	{
+		TextRenderer renderer(glm::mat4(1.0f));
+		auto draw_line = [&](std::string const &text, int index, glm::u8vec4 color) {
+			glm::vec3 anchor(
+				-1.0f + margin_px * px_w,
+				1.0f - (margin_px + line_px * 1.25f * float(index) + line_px) * px_h,
+				0.0f
+			);
+			renderer.draw_text(*ui_font, text, anchor + glm::vec3(1.5f * px_w, -1.5f * px_h, 0.0f), x_axis, y_axis, glm::u8vec4(27, 16, 18, 200));
+			renderer.draw_text(*ui_font, text, anchor, x_axis, y_axis, color);
+		};
+		draw_line("FRUIT " + std::to_string(fruits), 0, glm::u8vec4(255, 236, 196, 255));
+		draw_line("VEG " + std::to_string(vegetables), 1, glm::u8vec4(255, 170, 140, 255));
+	}
+	glDisable(GL_BLEND);
+}
+
+// Drawn in the map viewport's clip space, so the bottom bar stays undimmed.
+void PlayMode::draw_pause_overlay() {
+	if (bar_vao_ == 0) return;
+
+	struct ColorVertex {
+		glm::vec3 Position;
+		glm::u8vec4 Color;
+	};
+	std::vector< ColorVertex > verts;
+	auto rect = [&](glm::vec2 mn, glm::vec2 mx, glm::u8vec4 color) {
+		verts.push_back({glm::vec3(mn.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
+		verts.push_back({glm::vec3(mn.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
+		verts.push_back({glm::vec3(mn.x, mx.y, 0.0f), color});
+	};
+
+	rect(glm::vec2(-1.0f), glm::vec2(1.0f), glm::u8vec4(12, 6, 4, 90));
+
+	// Two-bar pause icon, top center. Widths are divided by aspect so it isn't stretched.
+	float aspect = map_aspect();
+	glm::vec2 half(0.03f / aspect, 0.08f);
+	float offset = 0.055f / aspect;
+	float icon_y = 0.84f;
+	glm::vec2 shadow(0.008f / aspect, -0.008f);
+	for (float side : {-1.0f, 1.0f}) {
+		glm::vec2 c(side * offset, icon_y);
+		rect(c - half + shadow, c + half + shadow, glm::u8vec4(27, 16, 18, 200));
+		rect(c - half, c + half, glm::u8vec4(255, 236, 196, 255));
+	}
+
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(ColorVertex), verts.data(), GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glDrawArrays(GL_TRIANGLES, 0, GLsizei(verts.size()));
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+	glDisable(GL_BLEND);
+}
+
 void PlayMode::draw_bar() {
 	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
 
@@ -719,21 +814,17 @@ void PlayMode::draw_bar() {
 
 	std::string label = std::to_string(resources_);
 	float text_h = ndc_h(place.text_h);
-	glm::vec3 anchor(ndc_x(place.text_left), coin_cy - 0.5f * text_h, 0.0f);
+	glm::vec3 anchor(ndc_x(place.text_left), coin_cy - kFontCapCenter * text_h, 0.0f);
 	glm::u8vec4 ink(255, 236, 196, 255);
-	float ox = ndc_w(1.2f);
-	float oy = ndc_h(1.2f);
-	glm::vec2 stamps[5] = {
-		glm::vec2(0.0f, 0.0f),
-		glm::vec2(ox, 0.0f), glm::vec2(-ox, 0.0f),
-		glm::vec2(0.0f, oy), glm::vec2(0.0f, -oy),
-	};
+	float scale_x = ndc_w(place.text_h) / float(ui_font->pixel_height);
+	float scale_y = text_h / float(ui_font->pixel_height);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	{
-		DrawLines lines(glm::mat4(1.0f));
-		for (glm::vec2 stamp : stamps) {
-			lines.draw_text(label, anchor + glm::vec3(stamp, 0.0f), glm::vec3(text_h, 0.0f, 0.0f), glm::vec3(0.0f, text_h, 0.0f), ink);
-		}
+		TextRenderer renderer(glm::mat4(1.0f));
+		renderer.draw_text(*ui_font, label, anchor, glm::vec3(scale_x, 0.0f, 0.0f), glm::vec3(0.0f, scale_y, 0.0f), ink);
 	}
+	glDisable(GL_BLEND);
 
 	if (dragging_ && !map.can_place(hover_col, hover_row)) {
 		glm::vec2 cursor(ndc_x(mouse.x), ndc_y(mouse.y));

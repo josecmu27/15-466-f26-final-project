@@ -2,8 +2,8 @@
 
 #include "PlayMode.hpp"
 #include "ColorProgram.hpp"
-#include "DrawLines.hpp"
-#include "PathFont.hpp"
+#include "GameFonts.hpp"
+#include "TextRenderer.hpp"
 #include "gl_errors.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
@@ -145,36 +145,17 @@ void paint_film(Mesh &fx, float time) {
 	}
 }
 
-float text_width(std::string const &text) {
-	// Mirrors the glyph lookup in DrawLines::draw_text so text can be centered.
-	float width = 0.0f;
-	uint32_t start = 0;
-	while (start < text.size()) {
-		uint32_t end = start;
-		uint32_t glyph = -1U;
-		while (end < text.size()) {
-			end += 1;
-			auto f = PathFont::font.glyph_map.find(text.substr(start, end - start));
-			if (f == PathFont::font.glyph_map.end()) {
-				end -= 1;
-				break;
-			}
-			glyph = f->second;
-		}
-		if (glyph == -1U) {
-			end += 1;
-			width += 0.6f;
-		} else {
-			width += PathFont::font.glyph_widths[glyph];
-		}
-		start = end;
-	}
-	return width;
+// Width of `text` in units of its height.
+float text_width(Font const &font, std::string const &text) {
+	float advance = 0.0f;
+	font.layout(text, &advance);
+	return advance / float(font.pixel_height);
 }
 
-// PathFont glyphs are single-pixel lines; stamping them in a small disc makes them read as bold.
-void draw_bold_text(DrawLines &lines, std::string const &text, glm::vec2 center, float height, float weight, glm::u8vec4 color) {
-	glm::vec2 anchor = center - glm::vec2(0.5f * text_width(text) * height, 0.5f * height);
+// The font has a single regular weight; stamping it in a small disc makes it read as bold.
+void draw_bold_text(TextRenderer &renderer, Font const &font, std::string const &text, glm::vec2 center, float height, float weight, glm::u8vec4 color) {
+	glm::vec2 anchor = center - glm::vec2(0.5f * text_width(font, text) * height, kFontCapCenter * height);
+	float scale = height / float(font.pixel_height);
 	int rings = 3;
 	for (int ring = 0; ring <= rings; ++ring) {
 		float r = weight * float(ring) / float(rings);
@@ -182,7 +163,7 @@ void draw_bold_text(DrawLines &lines, std::string const &text, glm::vec2 center,
 		for (int i = 0; i < count; ++i) {
 			float a = float(i) / float(count) * kTau;
 			glm::vec2 at = anchor + r * glm::vec2(std::cos(a), std::sin(a));
-			lines.draw_text(text, glm::vec3(at, 0.0f), glm::vec3(height, 0.0f, 0.0f), glm::vec3(0.0f, height, 0.0f), color);
+			renderer.draw_text(font, text, glm::vec3(at, 0.0f), glm::vec3(scale, 0.0f, 0.0f), glm::vec3(0.0f, scale, 0.0f), color);
 		}
 	}
 }
@@ -372,14 +353,14 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 	glUseProgram(0);
 
 	{ // Text goes last so it sits on top of everything.
-		DrawLines lines(clip_from_ui);
+		TextRenderer text(clip_from_ui);
 		// Shrink the title on narrow windows so it stays inside the card.
-		float title_h = std::min(0.24f, (2.0f * card_hw - 0.3f) / text_width(kTitle));
-		draw_bold_text(lines, kTitle, glm::vec2(0.0f, 0.42f) + glm::vec2(0.012f, -0.012f), title_h, 0.012f, kInk);
-		draw_bold_text(lines, kTitle, glm::vec2(0.0f, 0.42f), title_h, 0.010f, kCherry);
+		float title_h = std::min(0.34f, (2.0f * card_hw - 0.3f) / text_width(*title_font, kTitle));
+		draw_bold_text(text, *title_font, kTitle, glm::vec2(0.0f, 0.42f) + glm::vec2(0.012f, -0.012f), title_h, 0.006f, kInk);
+		draw_bold_text(text, *title_font, kTitle, glm::vec2(0.0f, 0.42f), title_h, 0.004f, kCherry);
 
-		draw_bold_text(lines, "START", kStartCenter + button_lift(Button::Start), 0.11f, 0.005f, kPaper);
-		draw_bold_text(lines, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.11f, 0.005f, kInk);
+		draw_bold_text(text, *ui_font, "START", kStartCenter + button_lift(Button::Start), 0.14f, 0.002f, kPaper);
+		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.14f, 0.002f, kInk);
 	}
 
 	{ // Film overlay last, already in clip space, so it covers the whole screen including text.

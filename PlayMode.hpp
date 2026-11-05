@@ -40,6 +40,11 @@ struct PlayMode : Mode {
 	void draw_troops(glm::mat4 const &clip_from_world);
 	void draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color);
 	void draw_bar();
+	void draw_pause_overlay();
+	void draw_unit_stats();
+
+	// Freezes the battle; troops can still be placed while paused.
+	bool paused_ = false;
 
 	// GAME LOGIC
 	std::vector<std::shared_ptr<Troop>> troops;
