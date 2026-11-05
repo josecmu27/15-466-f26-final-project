@@ -3,6 +3,7 @@
 #include "Mode.hpp"
 #include "Map.hpp"
 #include "Pathfinder.hpp"
+#include "World.hpp"
 
 #include <glm/glm.hpp>
 #include "Brawler.hpp"
@@ -15,8 +16,6 @@ struct PlayMode : Mode {
 	virtual void update(float elapsed) override;
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
-	Map map;
-	Pathfinder paths{map};
 	float time_ = 0.0f;
 
 	glm::uvec2 window_size = glm::uvec2(1280, 720);
@@ -32,14 +31,14 @@ struct PlayMode : Mode {
 	float map_aspect() const;
 
 	// Drops a cherry brawler at the center of the grass cell under `world`.
-	void place_troop(glm::vec2 world);
+	void place_troop(glm::vec2 spawn_pos);
 	void load_troop_sprite();
 	void load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half);
-	// px_scale <= 0 picks a scale that makes this strip 1.7 units tall, and returns that scale.
-	float load_frames(std::string const &prefix, int count, GLuint *tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, glm::vec2 &offset, float px_scale);
-	int fruit_frame(size_t index) const;
-	int fruit_attack_frame(size_t index) const;
-	glm::vec2 fruit_sprite_center(glm::vec2 pos, bool attacking) const;
+// px_scale <= 0 picks a scale that makes this strip 1.7 units tall, and returns that scale.
+  float load_frames(std::string const &prefix, int count, GLuint *tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, glm::vec2 &offset, float px_scale);
+  int fruit_frame(std::shared_ptr<Troop> const &troop) const;
+  int fruit_attack_frame(std::shared_ptr<Troop> const &troop) const;
+  glm::vec2 fruit_sprite_center(glm::vec2 pos, bool attacking) const;
 	void draw_troops(glm::mat4 const &clip_from_world);
 	void draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color);
 	void draw_bar();
@@ -48,9 +47,6 @@ struct PlayMode : Mode {
 
 	// Freezes the battle; troops can still be placed while paused.
 	bool paused_ = false;
-
-	// GAME LOGIC
-	std::vector<std::shared_ptr<Troop>> troops;
 
 	GLuint troop_tex_ = 0;
 	GLuint troop_vbo_ = 0;
@@ -70,9 +66,6 @@ struct PlayMode : Mode {
 	glm::vec2 attack_uv_max_ = glm::vec2(1.0f);
 	glm::vec2 attack_half_ = glm::vec2(0.7f);
 	glm::vec2 attack_offset_ = glm::vec2(0.0f);
-	std::vector< float > walk_time_;
-	std::vector< float > attack_time_;
-	std::vector< unsigned char > pose_; // 1 = walk, 2 = attack
 	GLuint enemy_tex_ = 0;
 	glm::vec2 enemy_uv_min_ = glm::vec2(0.0f);
 	glm::vec2 enemy_uv_max_ = glm::vec2(1.0f);
