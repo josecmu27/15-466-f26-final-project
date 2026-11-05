@@ -311,6 +311,7 @@ namespace {
 
 struct BarPlaces {
 	float slot_x = 0.0f;
+	float slot_x2 = 0.0f;
 	float slot_y = 0.0f;
 	float side = 0.0f;
 	float coin_cx = 0.0f;
@@ -334,7 +335,9 @@ BarPlaces bar_places(glm::uvec2 window, float bar_frac) {
 	p.text_left = p.coin_cx + p.coin_r + gap;
 	constexpr float resource_digits = 3.0f;
 	float text_w = resource_digits * p.text_h;
+
 	p.slot_x = p.text_left + text_w + gap;
+	p.slot_x2 = p.slot_x + p.side + gap + 0.5f;
 	p.slot_y = map_h + pad;
 	return p;
 }
@@ -346,11 +349,26 @@ float PlayMode::map_aspect() const {
 	return float(std::max(window_size.x, 1u)) / map_h;
 }
 
-bool PlayMode::pointer_on_slot() const {
+bool PlayMode::pointer_on_slot(){
 	if (window_size.x == 0 || window_size.y == 0) return false;
 	BarPlaces slot = bar_places(window_size, bar_frac_);
-	return mouse.x >= slot.slot_x && mouse.x <= slot.slot_x + slot.side
-		&& mouse.y >= slot.slot_y && mouse.y <= slot.slot_y + slot.side;
+
+	// Check CherryBrawler slot
+	if (mouse.x >= slot.slot_x && mouse.x <= slot.slot_x + slot.side
+		&& mouse.y >= slot.slot_y && mouse.y <= slot.slot_y + slot.side){
+			selected_troop = TroopType::CHERRY_BRAWLER;
+			return true;
+	}
+
+
+	// Check BananaRanged slot
+	if (mouse.x >= slot.slot_x2 && mouse.x <= slot.slot_x2 + slot.side
+		&& mouse.y >= slot.slot_y && mouse.y <= slot.slot_y + slot.side){
+			selected_troop = TroopType::BANANA_RANGED;
+			return true;
+		}
+
+	return false;
 }
 
 bool PlayMode::mouse_to_world(glm::vec3 &hit) const {
@@ -386,19 +404,45 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 	int row = 0;
 	if (!World::get_world()->map.world_to_cell(glm::vec3(spawn_pos, 0.0f), col, row)) return;
 	if (!World::get_world()->map.can_place(col, row)) return;
-	if (resources_ < cherry_cost_) return;
-	resources_ -= cherry_cost_;
-	glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-	World::get_world()->troops.push_back(std::make_shared<Brawler>(
-		pos, "CherryBrawler",
-		100, cherry_cost_, 
-		25,
-		1.0f, 
-		1.0f, 
-		1.0f,
-		1.0f, // radius
-		Team::FRUIT
-	));
+
+	if (selected_troop == TroopType::CHERRY_BRAWLER){
+		if (resources_ < cherry_cost_) return;
+
+		resources_ -= cherry_cost_;
+		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
+
+		World::get_world()->troops.push_back(std::make_shared<Brawler>(
+			pos, "CherryBrawler",
+			100, 
+			cherry_cost_, 
+			25,
+			1.0f, 
+			1.0f, 
+			1.0f,
+			1.0f, // radius
+			Team::FRUIT
+		));
+	} 
+	else if (selected_troop == TroopType::BANANA_RANGED){
+		if (resources_ < banana_cost_) return;
+
+		resources_ -= banana_cost_;
+		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
+
+		World::get_world()->troops.push_back(std::make_shared<Brawler>(
+			pos, "BananaRanged",
+			75, 
+			banana_cost_, 
+			15, // damage
+			7.5f, // range
+			0.75f, // attack rate
+			1.25f, // speed
+			1.0f, // radius
+			Team::FRUIT
+		));
+	}
+
+	
 }
 
 // Temp function for prototype
@@ -554,8 +598,13 @@ glm::vec2 PlayMode::fruit_sprite_center(glm::vec2 pos, bool attacking) const {
 void PlayMode::load_troop_sprite() {
 	load_sprite_png("cherry_brawler.png", troop_tex_, troop_uv_min_, troop_uv_max_, troop_half_);
 	load_sprite_png("tomato_brawler.png", enemy_tex_, enemy_uv_min_, enemy_uv_max_, enemy_half_);
+	load_sprite_png("banana_ranged.png", banana_tex_, banana_uv_min_, banana_uv_max_, banana_half_);
+
 	float scale = load_frames("BlueTeam/Cherry/Walk/CherryBrawler_Walk-", walk_frames_, walk_tex_, walk_uv_min_, walk_uv_max_, walk_half_, walk_offset_, 0.0f);
 	load_frames("BlueTeam/Cherry/Attack/CherryBrawler_Attack-", attack_frames_, attack_tex_, attack_uv_min_, attack_uv_max_, attack_half_, attack_offset_, scale);
+
+	float banana_scale = load_frames("BlueTeam/Banana/Walk/BananaRanged_Walk-", banana_walk_frames_, banana_walk_tex_, banana_walk_uv_min_, banana_walk_uv_max_, banana_walk_half_, banana_walk_offset_, 0.0f);
+	load_frames("BlueTeam/Banana/Attack/BananaRanged_Attack-", banana_attack_frames_, banana_attack_tex_, banana_attack_uv_min_, banana_attack_uv_max_, banana_attack_half_, banana_attack_offset_, banana_scale);
 	// The crop sits on the cell center, so the feet land on the bottom edge. Lift the body into the cell.
 	constexpr float place_lift = 0.45f;
 	walk_offset_.y += place_lift;
@@ -565,6 +614,8 @@ void PlayMode::load_troop_sprite() {
 	glGenVertexArrays(1, &troop_vao_);
 	glBindVertexArray(troop_vao_);
 	glBindBuffer(GL_ARRAY_BUFFER, troop_vbo_);
+
+
 	glVertexAttribPointer(color_texture_program->Position_vec4, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3) + sizeof(glm::u8vec4) + sizeof(glm::vec2), (void *)0);
 	glEnableVertexAttribArray(color_texture_program->Position_vec4);
 	glVertexAttribPointer(color_texture_program->Color_vec4, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(glm::vec3) + sizeof(glm::u8vec4) + sizeof(glm::vec2), (void *)sizeof(glm::vec3));
@@ -1032,8 +1083,10 @@ void PlayMode::draw_bar() {
 
 	float inset = side * 0.08f;
 	glm::vec2 icon_center(ndc_x(place.slot_x + side * 0.5f), ndc_y(place.slot_y + side * 0.5f));
+	// glm::vec2 icon2_center(ndc_x(place.slot_x2 + side * 0.5f), ndc_y(place.slot_y + side * 0.5f));
 	glm::vec2 icon_half((side - inset * 2.0f) / float(window_size.x), (side - inset * 2.0f) / float(window_size.y));
 	draw_sprite(glm::mat4(1.0f), icon_center, icon_half, glm::u8vec4(255, 255, 255, 255));
+	
 
 	auto ndc_w = [&](float px) { return px / float(window_size.x) * 2.0f; };
 	auto ndc_h = [&](float px) { return px / float(window_size.y) * 2.0f; };

@@ -87,4 +87,5 @@ public:
     glm::vec2 get_position() const { return position; }
     void set_position(glm::vec2& new_position) {position = new_position;}
 
+    float get_radius() { return radius; }
 };
