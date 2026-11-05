@@ -25,6 +25,7 @@ protected:
     float attack_rate;
     float movement_speed;
     float radius;
+    bool selected = false;
     Team team;
 
     float walk_time = 0.0f;
@@ -53,6 +54,8 @@ public:
     int get_max_health() const { return max_health; }
     void set_health(int new_health) { health = new_health; }
     bool is_dead() const {return health <= 0; }
+    bool is_selected() const { return selected; }
+    void set_selected(bool s) { selected = s; }
 
     float get_walk_time() const { return walk_time; }
     void add_walk_time(float elapsed ) { walk_time += elapsed; }

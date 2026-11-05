@@ -26,13 +26,13 @@ struct ColorVertex {
 };
 
 // Soft oval tucked under the feet. The sprite is centered on `center`, so the feet sit at the bottom edge.
-void add_foot_shadow(std::vector< ColorVertex > &verts, glm::vec2 center, glm::vec2 half) {
+void add_foot_shadow(std::vector< ColorVertex > &verts, glm::vec2 center, glm::vec2 half, glm::u8vec3 color) {
 	float rx = std::max(half.x * 0.88f, 0.42f);
 	float ry = 0.26f;
 	glm::vec2 foot(center.x, center.y - half.y + ry * 0.12f);
-	glm::u8vec4 core(18, 10, 6, 235);
-	glm::u8vec4 mid(18, 10, 6, 180);
-	glm::u8vec4 edge(18, 10, 6, 0);
+	glm::u8vec4 core(color.r, color.g, color.b, 235);
+	glm::u8vec4 mid(color.r, color.g, color.b, 180);
+	glm::u8vec4 edge(color.r, color.g, color.b, 0);
 	constexpr int segs = 18;
 	constexpr float inner = 0.62f;
 	for (int i = 0; i < segs; ++i) {
@@ -119,6 +119,8 @@ PlayMode::~PlayMode() {
 	bar_vao_ = bar_vbo_ = 0;
 }
 
+static const float troop_size = 0.7f;
+
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_) {
 	window_size = window_size_;
 	if (evt.type == SDL_EVENT_MOUSE_MOTION) {
@@ -139,6 +141,18 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 		if (dragging_) {
 			glm::vec3 hit;
 			if (mouse_to_world(hit)) place_troop(glm::vec2(hit));
+		}
+		if (box_dragging_) {
+			glm::vec2 mn = (glm::min(glm::vec2(box_start_), glm::vec2(box_end_)));
+			glm::vec2 mx = (glm::max(glm::vec2(box_start_), glm::vec2(box_end_)));
+
+			for (auto const &troop : World::get_world()->troops) {
+				troop->set_selected(false);
+				if (troop->get_team() != Team::FRUIT) continue;
+				glm::vec2 pos = troop->get_position();
+				bool selected = pos.x - troop_size <= mx.x && pos.x + troop_size >= mn.x && pos.y - troop_size <= mx.y && pos.y + troop_size >= mn.y;
+				troop->set_selected(selected);
+			}
 		}
 		dragging_ = false;
 		box_dragging_ = false;
@@ -194,7 +208,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 		if (walk_tex_[0] != 0) ghost_at += walk_offset_;
 		if (bar_vao_ != 0) {
 			std::vector< ColorVertex > shadow;
-			add_foot_shadow(shadow, ghost_at, ghost_half);
+			add_foot_shadow(shadow, ghost_at, ghost_half, glm::u8vec3(18, 10, 6));
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
@@ -527,7 +541,11 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 				center = fruit_sprite_center(center, attacking);
 			} else if (team == Team::VEGETABLE) half = enemy_half_;
 			else continue;
-			add_foot_shadow(shadows, center, half);
+			if (troop->is_selected()) {
+				add_foot_shadow(shadows, center, half, glm::u8vec3(255, 215, 0));
+			} else {
+				add_foot_shadow(shadows, center, half, glm::u8vec3(18, 10, 6));
+			}
 		}
 		if (!shadows.empty()) {
 			glEnable(GL_BLEND);
