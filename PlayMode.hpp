@@ -44,9 +44,9 @@ struct PlayMode : Mode {
 	float load_frames(std::string const &prefix, int count, GLuint *tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, glm::vec2 &offset, float px_scale);
 	int fruit_frame(std::shared_ptr<Troop> const &troop) const;
 	int fruit_attack_frame(std::shared_ptr<Troop> const &troop) const;
-	glm::vec2 fruit_sprite_center(glm::vec2 pos, bool attacking) const;
+	glm::vec2 fruit_sprite_center(glm::vec2 pos, bool attacking, bool banana) const;
 	void draw_troops(glm::mat4 const &clip_from_world);
-	void draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color);
+	void draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color, GLuint tex, glm::vec2 uv_min, glm::vec2 uv_max);
 	void draw_bar();
 	void draw_pause_overlay();
 	void draw_unit_stats();
@@ -85,6 +85,18 @@ struct PlayMode : Mode {
 	glm::vec2 enemy_uv_min_ = glm::vec2(0.0f);
 	glm::vec2 enemy_uv_max_ = glm::vec2(1.0f);
 	glm::vec2 enemy_half_ = glm::vec2(0.7f);
+	static constexpr int enemy_walk_frames_ = 11;
+	GLuint enemy_walk_tex_[enemy_walk_frames_] = {};
+	glm::vec2 enemy_walk_uv_min_ = glm::vec2(0.0f);
+	glm::vec2 enemy_walk_uv_max_ = glm::vec2(1.0f);
+	glm::vec2 enemy_walk_half_ = glm::vec2(0.7f);
+	glm::vec2 enemy_walk_offset_ = glm::vec2(0.0f);
+	static constexpr int enemy_attack_frames_ = 11;
+	GLuint enemy_attack_tex_[enemy_attack_frames_] = {};
+	glm::vec2 enemy_attack_uv_min_ = glm::vec2(0.0f);
+	glm::vec2 enemy_attack_uv_max_ = glm::vec2(1.0f);
+	glm::vec2 enemy_attack_half_ = glm::vec2(0.7f);
+	glm::vec2 enemy_attack_offset_ = glm::vec2(0.0f);
 
 	// temporary (will refactor later)
 	GLuint banana_tex_ = 0;
@@ -97,7 +109,7 @@ struct PlayMode : Mode {
 	glm::vec2 banana_walk_uv_max_ = glm::vec2(1.0f);
 	glm::vec2 banana_walk_half_ = glm::vec2(0.7f);
 	glm::vec2 banana_walk_offset_ = glm::vec2(0.0f);
-	static constexpr int banana_attack_frames_ = 11;
+	static constexpr int banana_attack_frames_ = 16;
 	GLuint banana_attack_tex_[banana_attack_frames_] = {};
 	glm::vec2 banana_attack_uv_min_ = glm::vec2(0.0f);
 	glm::vec2 banana_attack_uv_max_ = glm::vec2(1.0f);
