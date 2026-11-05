@@ -39,4 +39,5 @@ public:
 
     void handle_collisions();
     void cleanup_defeated_troops();
+    void cleanup_inactive_projectiles();
 };
