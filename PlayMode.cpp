@@ -17,6 +17,9 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <limits>
+#include <set>
+#include <utility>
 
 namespace {
 
@@ -26,13 +29,13 @@ struct ColorVertex {
 };
 
 // Soft oval tucked under the feet. The sprite is centered on `center`, so the feet sit at the bottom edge.
-void add_foot_shadow(std::vector< ColorVertex > &verts, glm::vec2 center, glm::vec2 half) {
+void add_foot_shadow(std::vector< ColorVertex > &verts, glm::vec2 center, glm::vec2 half, glm::u8vec3 color) {
 	float rx = std::max(half.x * 0.88f, 0.42f);
 	float ry = 0.26f;
 	glm::vec2 foot(center.x, center.y - half.y + ry * 0.12f);
-	glm::u8vec4 core(18, 10, 6, 235);
-	glm::u8vec4 mid(18, 10, 6, 180);
-	glm::u8vec4 edge(18, 10, 6, 0);
+	glm::u8vec4 core(color.r, color.g, color.b, 235);
+	glm::u8vec4 mid(color.r, color.g, color.b, 180);
+	glm::u8vec4 edge(color.r, color.g, color.b, 0);
 	constexpr int segs = 18;
 	constexpr float inner = 0.62f;
 	for (int i = 0; i < segs; ++i) {
@@ -69,6 +72,7 @@ PlayMode::PlayMode() {
 	SDL_GetMouseState(&mx, &my);
 	mouse = glm::vec2(mx, my);
 
+	World::get_world()->play_mode = this;
 
 	glm::vec2 basket_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
 	auto basket = std::make_shared<Brawler>(basket_at, "Basket", 
@@ -118,16 +122,25 @@ PlayMode::~PlayMode() {
 	bar_vao_ = bar_vbo_ = 0;
 }
 
+static const float troop_size = 0.7f;
+
+static bool troop_overlaps(glm::vec2 pos, glm::vec2 mn, glm::vec2 mx) {
+	return pos.x - troop_size <= mx.x && pos.x + troop_size >= mn.x && pos.y - troop_size <= mx.y && pos.y + troop_size >= mn.y;
+}
+
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_) {
 	window_size = window_size_;
 	if (evt.type == SDL_EVENT_MOUSE_MOTION) {
 		mouse = glm::vec2(evt.motion.x, evt.motion.y);
+		if (box_dragging_) mouse_to_world(box_end_);
 		return true;
 	}
 	if (won_) return false;
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		dragging_ = pointer_on_slot();
+		box_dragging_ = !dragging_ && mouse_to_world(box_start_);
+		box_end_ = box_start_;
 		return true;
 	}
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP && evt.button.button == SDL_BUTTON_LEFT) {
@@ -136,7 +149,66 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 			glm::vec3 hit;
 			if (mouse_to_world(hit)) place_troop(glm::vec2(hit));
 		}
+		if (box_dragging_) {
+			glm::vec2 mn = (glm::min(glm::vec2(box_start_), glm::vec2(box_end_)));
+			glm::vec2 mx = (glm::max(glm::vec2(box_start_), glm::vec2(box_end_)));
+
+			for (auto const &troop : World::get_world()->troops) {
+				troop->set_selected(false);
+				if (troop->get_team() != Team::FRUIT) continue;
+				glm::vec2 pos = troop->get_position();
+				bool selected = troop_overlaps(pos, mn, mx);
+				troop->set_selected(selected);
+			}
+		}
 		dragging_ = false;
+		box_dragging_ = false;
+		return true;
+	}
+	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_RIGHT) {
+		mouse = glm::vec2(evt.button.x, evt.button.y);
+		World *world = World::get_world();
+		glm::vec3 hit;
+		if (mouse_to_world(hit)) {
+			glm::vec2 click = glm::vec2(hit);
+			int command_count = 0;
+			for (auto &troop : world->troops) {
+				if (troop->is_selected()) command_count++;
+			}
+			if (command_count == 0) return true;
+			std::shared_ptr<Troop> target;
+			float best = std::numeric_limits<float>::infinity();
+			for (auto &troop : world->troops) {
+				if (troop->is_dead()) continue;
+				glm::vec2 pos = troop->get_position();
+				if (troop->get_team() == Team::VEGETABLE) {
+					float dist = glm::distance(pos, click);
+					if (troop_overlaps(pos, click, click) && dist < best) {
+						best = dist;
+						target = troop;
+					}
+				}
+			}
+
+			Order order;
+			if (target) {
+				order.type = OrderType::Attack;
+				order.attack_target = target;
+			} else {
+				int row = 0;
+				int col = 0;
+				if (!world->map.world_to_cell(hit, col, row)) return true;
+				if (!world->map.is_walkable(col, row)) return true;
+				order.type = OrderType::Move;
+				order.move_target = click;
+				order.arrive_radius = 0.2f;
+			}
+			for (auto &troop : world->troops) {
+				if (troop->is_selected()) {
+					troop->give_order(order);
+				}
+			}
+		}
 		return true;
 	}
 	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_SPACE) {
@@ -189,7 +261,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 		if (walk_tex_[0] != 0) ghost_at += walk_offset_;
 		if (bar_vao_ != 0) {
 			std::vector< ColorVertex > shadow;
-			add_foot_shadow(shadow, ghost_at, ghost_half);
+			add_foot_shadow(shadow, ghost_at, ghost_half, glm::u8vec3(18, 10, 6));
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
@@ -289,6 +361,7 @@ bool PlayMode::mouse_to_world(glm::vec3 &hit) const {
 void PlayMode::refresh_hover() {
 	hover_col = -1;
 	hover_row = -1;
+	if (!dragging_) return;
 	glm::vec3 hit;
 	if (!mouse_to_world(hit)) return;
 	int col = 0;
@@ -510,6 +583,20 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 
 	if (bar_vao_ != 0) {
 		std::vector< ColorVertex > shadows;
+
+		std::set< Troop const * > attack_targets;
+		std::set< std::pair<float, float> > move_targets;
+		for (auto &troop : World::get_world()->troops) {
+			if (!troop || !troop->is_selected()) continue;
+			Order const &order = troop->get_order();
+			if (order.type == OrderType::Attack) {
+				auto target = order.attack_target.lock();
+				attack_targets.insert(target.get());
+			} else if (order.type == OrderType::Move) {
+				move_targets.insert(std::make_pair(order.move_target.x, order.move_target.y));
+			}
+		}
+
 		for (auto const &troop : World::get_world()->troops) {
 			if (!troop || troop->is_dead()) continue;
 			Team team = troop->get_team();
@@ -521,8 +608,20 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 				center = fruit_sprite_center(center, attacking);
 			} else if (team == Team::VEGETABLE) half = enemy_half_;
 			else continue;
-			add_foot_shadow(shadows, center, half);
+
+			glm::u8vec3 color;
+			if (attack_targets.contains(troop.get()))
+				color = glm::u8vec3(255, 0, 0);
+			else if (troop->is_selected())
+				color = glm::u8vec3(255, 215, 0);
+			else
+				color = glm::u8vec3(18, 10, 6);
+			add_foot_shadow(shadows, center, half, color);
 		}
+		for (auto target : move_targets) {
+			add_foot_shadow(shadows, glm::vec2(target.first, target.second), glm::vec2(0.0f), glm::u8vec3(255, 0, 0));
+		}
+
 		if (!shadows.empty()) {
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
