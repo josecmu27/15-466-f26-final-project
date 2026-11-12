@@ -62,6 +62,9 @@ void Brawler::update(float elapsed)
     auto target = target_troop.lock();
 
     if (target && distance_to(position, *target) < attack_range){
+        float aim = target->get_position().x - position.x;
+        if (aim > 0.01f) set_face_left(false);
+        else if (aim < -0.01f) set_face_left(true);
         if (attack_timer < 0.0f){
             attack();
             attack_timer = attack_rate;

@@ -16,6 +16,7 @@ public:
 
     void update(float elapsed) override;
     void attack() override;
+    bool is_attacking() const override;
     void move_to_target(float elapsed) override;
     void determine_target() override;
     void walk_toward(float elapsed, glm::vec2 goal);

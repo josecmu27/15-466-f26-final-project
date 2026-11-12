@@ -53,7 +53,14 @@ void Ranged::update(float elapsed)
     } else{
         move_to_target(elapsed);
     }
-}   
+}
+
+bool Ranged::is_attacking() const
+{
+    auto target = target_troop.lock();
+    if (!target || target->is_dead()) return false;
+    return glm::distance(position, target->get_position()) < attack_range;
+}
 
 void Ranged::attack()
 {

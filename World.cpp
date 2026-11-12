@@ -16,6 +16,10 @@ void World::update(float elapsed)
         glm::vec2 p = glm::clamp(troop->get_position(), left, right);
 		troop->set_position(p);
 
+        float dx = p.x - before.x;
+        if (dx > 0.002f) troop->set_face_left(false);
+        else if (dx < -0.002f) troop->set_face_left(true);
+
         Team team = troop->get_team();
         if (team != Team::FRUIT && team != Team::VEGETABLE) continue;
         if (troop->is_attacking()) {
