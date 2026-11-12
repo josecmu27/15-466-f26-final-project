@@ -2,6 +2,8 @@
 #include "Projectile.hpp"
 #include "World.hpp"
 
+#include <cmath>
+
 namespace {
 
 bool is_basket(Team team) {
@@ -39,18 +41,28 @@ void Ranged::update(float elapsed)
 {
     if (team == Team::BASKET || team == Team::ENEMY_BASKET) return;
 
-    auto target = target_troop.lock();
-    
-    attack_timer -= elapsed;
-
     determine_target();
 
-    if (target && glm::distance(position, target->get_position()) < attack_range){
-        if (attack_timer < 0.0f){
+    auto target = target_troop.lock();
+    bool in_range = target && !target->is_dead()
+        && glm::distance(position, target->get_position()) < attack_range;
+
+    if (in_range){
+        // One attack clip lasts attack_rate seconds. Frame 12 (index 11) is the throw.
+        constexpr int attack_frames = 16;
+        constexpr int release_frame = 11;
+        float rate = attack_rate > 1e-4f ? attack_rate : 16.0f / 12.0f;
+        float shown = (get_pose() == 2) ? get_attack_time() + elapsed : elapsed;
+        int tick = (int)std::floor(shown / rate * float(attack_frames));
+        if (tick < 0) tick = 0;
+        int cycle = tick / attack_frames;
+        int frame = tick % attack_frames;
+        if (frame >= release_frame && shot_cycle != cycle){
             attack();
-            attack_timer = attack_rate;
+            shot_cycle = cycle;
         }
     } else{
+        shot_cycle = -1;
         move_to_target(elapsed);
     }
 }

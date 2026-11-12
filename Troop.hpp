@@ -83,6 +83,7 @@ public:
     float get_attack_time() const { return attack_time; }
     void add_attack_time(float elapsed) { attack_time += elapsed; }
     void reset_attack_time() { attack_time = 0.0f; }
+    float get_attack_rate() const { return attack_rate; }
     unsigned char get_pose() const { return pose; }
     void set_pose(unsigned char next) { pose = next; }
     bool faces_left() const { return face_left; }

@@ -11,6 +11,7 @@ public:
 
     
     float attack_timer = attack_rate;
+    int shot_cycle = -1;
 
     std::weak_ptr<Troop> target_troop;
 

@@ -48,6 +48,7 @@ struct PlayMode : Mode {
 	void load_character(CharacterAnimDesc const &desc);
 	// px_scale <= 0 picks a scale that makes this strip 1.7 units tall, and returns that scale.
 	float load_frames(std::string const &prefix, int count, GLuint *tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, glm::vec2 &offset, float px_scale);
+	void load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, float height);
 	CharacterAnim const *find_anim(std::string const &troop_name) const;
 	void draw_troops(glm::mat4 const &clip_from_world);
 	void draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 half, glm::u8vec4 color, GLuint tex, glm::vec2 uv_min, glm::vec2 uv_max);
@@ -70,6 +71,10 @@ struct PlayMode : Mode {
 	GLuint troop_vbo_ = 0;
 	GLuint troop_vao_ = 0;
 	std::vector< CharacterAnim > characters_;
+	GLuint projectile_tex_ = 0;
+	glm::vec2 projectile_uv_min_ = glm::vec2(0.0f);
+	glm::vec2 projectile_uv_max_ = glm::vec2(1.0f);
+	glm::vec2 projectile_half_ = glm::vec2(0.2f);
 
 	static constexpr float bar_frac_ = 0.16f;
 	static constexpr int cherry_cost_ = 2;

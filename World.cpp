@@ -52,7 +52,7 @@ void World::handle_collisions()
         
         for (auto &projectile : projectiles)
         {
-            if (projectile->get_team() == troop->get_team()) return;
+            if (projectile->get_team() == troop->get_team()) continue;
             
             float dist_squared = (troop->get_position().x - projectile->get_position().x) *
                                  (troop->get_position().x - projectile->get_position().x) + 

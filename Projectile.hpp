@@ -20,6 +20,7 @@ public:
     void update(float elapsed);
 
     glm::vec2 get_position() { return position; }
+    glm::vec2 get_velocity() const { return velocity; }
 
     bool is_inactive() { return !active; }
     void set_inactive() { active = false; }

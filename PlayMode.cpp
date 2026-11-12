@@ -116,6 +116,8 @@ PlayMode::~PlayMode() {
 		release(anim.walk);
 		release(anim.attack);
 	}
+	if (projectile_tex_ != 0) glDeleteTextures(1, &projectile_tex_);
+	projectile_tex_ = 0;
 	if (troop_vao_ != 0) glDeleteVertexArrays(1, &troop_vao_);
 	if (troop_vbo_ != 0) glDeleteBuffers(1, &troop_vbo_);
 	if (bar_vao_ != 0) glDeleteVertexArrays(1, &bar_vao_);
@@ -488,6 +490,48 @@ void PlayMode::spawn_vegetable_troop()
 	);
 }
 
+void PlayMode::load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, float height) {
+	glm::uvec2 size(0);
+	std::vector< glm::u8vec4 > pixels;
+	load_png(data_path(file), &size, &pixels, LowerLeftOrigin);
+	if (size.x == 0 || size.y == 0 || pixels.empty()) {
+		throw std::runtime_error("PlayMode: " + file + " is empty");
+	}
+
+	int min_x = (int)size.x;
+	int min_y = (int)size.y;
+	int max_x = -1;
+	int max_y = -1;
+	for (int y = 0; y < (int)size.y; ++y) {
+		for (int x = 0; x < (int)size.x; ++x) {
+			if (pixels[(size_t)y * size.x + (size_t)x].a <= 20) continue;
+			min_x = std::min(min_x, x);
+			min_y = std::min(min_y, y);
+			max_x = std::max(max_x, x);
+			max_y = std::max(max_y, y);
+		}
+	}
+	if (max_x < min_x || max_y < min_y) {
+		throw std::runtime_error("PlayMode: " + file + " has no visible pixels");
+	}
+
+	uv_min = glm::vec2(float(min_x) / float(size.x), float(min_y) / float(size.y));
+	uv_max = glm::vec2(float(max_x + 1) / float(size.x), float(max_y + 1) / float(size.y));
+	float aspect = float(max_x - min_x + 1) / float(max_y - min_y + 1);
+	half = glm::vec2(height * aspect, height) * 0.5f;
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, (GLsizei)size.x, (GLsizei)size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 float PlayMode::load_frames(std::string const &prefix, int count, GLuint *tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, glm::vec2 &offset, float px_scale) {
 	struct Image {
 		glm::uvec2 size = glm::uvec2(0);
@@ -589,6 +633,7 @@ void PlayMode::load_troop_sprite() {
 		{"RadishBrawler", "RedTeam/Cherry/Walk/CherryBrawler_Walk-", 11, "RedTeam/Cherry/Attack/CherryBrawler_Attack-", 11, false, false, false},
 	};
 	for (auto const &desc : roster) load_character(desc);
+	load_sprite_png("Projectiles/banana_projectile.png", projectile_tex_, projectile_uv_min_, projectile_uv_max_, projectile_half_, 0.2f);
 
 	glGenBuffers(1, &troop_vbo_);
 	glGenVertexArrays(1, &troop_vao_);
@@ -701,6 +746,9 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 				if (!troop || troop->is_dead() || troop->get_name() != anim.troop_name) continue;
 				if (anim.attacking_pose(troop->get_pose()) != attacking) continue;
 				float anim_time = attacking ? troop->get_attack_time() : troop->get_walk_time();
+				if (attacking && troop->get_name() == "BananaRanged" && troop->get_attack_rate() > 1e-4f) {
+					anim_time *= float(clip.count()) / (troop->get_attack_rate() * 12.0f);
+				}
 				if (anim_frame(anim_time, clip.count()) != frame) continue;
 				bool face_left = troop->faces_left();
 				glm::vec2 c = anim.sprite_center(troop->get_position(), attacking, face_left);
@@ -728,6 +776,32 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 	for (auto const &anim : characters_) {
 		draw_clip(anim, false);
 		draw_clip(anim, true);
+	}
+	if (projectile_tex_ != 0) {
+		std::vector< SpriteVertex > verts;
+		for (auto const &projectile : World::get_world()->projectiles) {
+			if (!projectile || projectile->is_inactive()) continue;
+			glm::vec2 c = projectile->get_position() + glm::vec2(0.0f, 0.45f);
+			glm::vec2 bl = c - projectile_half_;
+			glm::vec2 tr = c + projectile_half_;
+			float u0 = projectile_uv_min_.x;
+			float u1 = projectile_uv_max_.x;
+			if (projectile->get_velocity().x < 0.0f) std::swap(u0, u1);
+			SpriteVertex quad[6] = {
+				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, projectile_uv_min_.y)},
+				{glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(u1, projectile_uv_min_.y)},
+				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, projectile_uv_max_.y)},
+				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, projectile_uv_min_.y)},
+				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, projectile_uv_max_.y)},
+				{glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(u0, projectile_uv_max_.y)},
+			};
+			verts.insert(verts.end(), quad, quad + 6);
+		}
+		if (!verts.empty()) {
+			glBindTexture(GL_TEXTURE_2D, projectile_tex_);
+			glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
+			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+		}
 	}
 
 	glBindVertexArray(0);
