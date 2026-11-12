@@ -163,6 +163,7 @@ const game_names = [
 	maek.CPP('load_wav.cpp'),
 	maek.CPP('load_opus.cpp'),
 	maek.CPP('Brawler.cpp'),
+	maek.CPP('Ranged.cpp'),
 	maek.CPP('Pathfinder.cpp'),
 	maek.CPP('Map.cpp'),
 	maek.CPP('World.cpp'),

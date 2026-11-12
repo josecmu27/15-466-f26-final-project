@@ -48,6 +48,8 @@ void World::handle_collisions()
         
         for (auto &projectile : projectiles)
         {
+            if (projectile->get_team() == troop->get_team()) return;
+            
             float dist_squared = (troop->get_position().x - projectile->get_position().x) *
                                  (troop->get_position().x - projectile->get_position().x) + 
                                  (troop->get_position().y - projectile->get_position().y) *
@@ -57,9 +59,11 @@ void World::handle_collisions()
             float radius_sum_squared = (troop->get_radius() + projectile->get_radius()) *
                                        (troop->get_radius() + projectile->get_radius());
 
-            if (dist_squared > radius_sum_squared){
+            if (dist_squared <= radius_sum_squared){
                 troop->set_health(troop->get_health() - projectile->get_damage());
                 projectile->set_inactive();
+                std::cout << "Troop Hit" << std::endl;
+                std::cout << "Projectile inactive" << std::endl;
             }
         }
 

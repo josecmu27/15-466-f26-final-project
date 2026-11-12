@@ -18,6 +18,7 @@ public:
     void attack() override;
     void move_to_target(float elapsed) override;
     void determine_target() override;
+    void walk_toward(float elapsed, glm::vec2 goal);
     void set_target(std::shared_ptr<Troop> target) { target_troop = target; }
 };
 
