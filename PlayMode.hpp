@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 #include "Brawler.hpp"
+#include "Ranged.hpp"
 
 /* troop selection (note that the baskets are not included)*/
 enum TroopType {

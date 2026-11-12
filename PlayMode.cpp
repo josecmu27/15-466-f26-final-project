@@ -456,7 +456,7 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 		resources_ -= banana_cost_;
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
 
-		World::get_world()->troops.push_back(std::make_shared<Brawler>(
+		World::get_world()->troops.push_back(std::make_shared<Ranged>(
 			pos, "BananaRanged",
 			75, 
 			banana_cost_, 
