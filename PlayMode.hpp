@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include "Brawler.hpp"
 #include "Ranged.hpp"
+#include "DataAssets.hpp"
 
 #include <string>
 #include <vector>
@@ -94,4 +95,6 @@ struct PlayMode : Mode {
 	void spawn_vegetable_troop();
 
 	TroopType selected_troop = TroopType::CHERRY_BRAWLER;
+
+	DataAssets data_assets;
 };

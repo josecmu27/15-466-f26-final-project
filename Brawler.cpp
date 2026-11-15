@@ -61,13 +61,13 @@ void Brawler::update(float elapsed)
 
     auto target = target_troop.lock();
 
-    if (target && distance_to(position, *target) < attack_range){
+    if (target && distance_to(position, *target) < data->attack_range){
         float aim = target->get_position().x - position.x;
         if (aim > 0.01f) set_face_left(false);
         else if (aim < -0.01f) set_face_left(true);
         if (attack_timer < 0.0f){
             attack();
-            attack_timer = attack_rate;
+            attack_timer = data->attack_rate;
         }
     } else{
         move_to_target(elapsed);
@@ -79,16 +79,16 @@ void Brawler::update(float elapsed)
 bool Brawler::is_attacking() const
 {
     auto target = target_troop.lock();
-    if (!target || target->is_dead()) return false;
-    return distance_to(position, *target) < attack_range;
+    if (!target || target->is_dead() || !data) return false;
+    return distance_to(position, *target) < data->attack_range;
 }
 
 void Brawler::attack()
 {
     auto target = target_troop.lock();
-    if (!target) return;
+    if (!target || !data) return;
 
-    target->take_damage(attack_damage);
+    target->take_damage(data->attack_damage);
     
     if (target->is_dead())
     {
@@ -120,13 +120,12 @@ void Brawler::walk_toward(float elapsed, glm::vec2 goal) {
 
     glm::vec2 wp = World::get_world()->paths.next_waypoint(position, goal, others);
     float dist = glm::distance(position, wp);
-    float step = movement_speed * elapsed;
+    float step = data->movement_speed * elapsed;
     if (dist > 0.0f) position = glm::mix(position, wp, std::min(1.0f, step / dist));
 }
 
-/* @brief find the closest troop from the opposite team
-
- * @param troops the troop list from PlayMode (might need to get replaced after prototype)
+/**
+ * @brief find the closest troop from the opposite team
  */
 void Brawler::determine_target()
 {
