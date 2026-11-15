@@ -45,13 +45,15 @@ void Ranged::update(float elapsed)
 
     auto target = target_troop.lock();
     bool in_range = target && !target->is_dead()
-        && glm::distance(position, target->get_position()) < attack_range;
+        && glm::distance(position, target->get_position()) < data->attack_range;
 
     if (in_range){
+        if (!data) return;
+
         // One attack clip lasts attack_rate seconds. Frame 12 (index 11) is the throw.
         constexpr int attack_frames = 16;
         constexpr int release_frame = 11;
-        float rate = attack_rate > 1e-4f ? attack_rate : 16.0f / 12.0f;
+        float rate = data->attack_rate > 1e-4f ? data->attack_rate : 16.0f / 12.0f;
         float shown = (get_pose() == 2) ? get_attack_time() + elapsed : elapsed;
         int tick = (int)std::floor(shown / rate * float(attack_frames));
         if (tick < 0) tick = 0;
@@ -70,23 +72,23 @@ void Ranged::update(float elapsed)
 bool Ranged::is_attacking() const
 {
     auto target = target_troop.lock();
-    if (!target || target->is_dead()) return false;
-    return glm::distance(position, target->get_position()) < attack_range;
+    if (!target || target->is_dead() || !data) return false;
+    return glm::distance(position, target->get_position()) < data->attack_range;
 }
 
 void Ranged::attack()
 {
     auto target = target_troop.lock();
-    if (!target) return;
+    if (!target || !data || !get_data_asset()) return;
 
     glm::vec2 projectile_dir = glm::normalize(target->get_position() - position);
 
     // spawn banana projectile in direction to the target troop
     World::get_world()->projectiles.push_back(std::make_shared<Projectile>(
 		position,
-		projectile_dir * 5.0f, // temporary hardcoded projectile speed
-		attack_damage,
-		0.75, // temporary hard coded radius
+		projectile_dir * get_data_asset()->projectile_speed,
+		data->attack_damage,
+		get_data_asset()->projectile_radius,
         team
 	));
 }
@@ -114,7 +116,7 @@ void Ranged::walk_toward(float elapsed, glm::vec2 goal) {
 
     glm::vec2 wp = World::get_world()->paths.next_waypoint(position, goal, others);
     float dist = glm::distance(position, wp);
-    float step = movement_speed * elapsed;
+    float step = data->movement_speed * elapsed;
     if (dist > 0.0f) position = glm::mix(position, wp, std::min(1.0f, step / dist));
 }
 

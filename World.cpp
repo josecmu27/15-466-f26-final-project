@@ -60,14 +60,12 @@ void World::handle_collisions()
                                  (troop->get_position().y - projectile->get_position().y);
 
             
-            float radius_sum_squared = (troop->get_radius() + projectile->get_radius()) *
-                                       (troop->get_radius() + projectile->get_radius());
+            float radius_sum_squared = (troop->get_troop_radius() + projectile->get_radius()) *
+                                       (troop->get_troop_radius() + projectile->get_radius());
 
             if (dist_squared <= radius_sum_squared){
                 troop->set_health(troop->get_health() - projectile->get_damage());
                 projectile->set_inactive();
-                std::cout << "Troop Hit" << std::endl;
-                std::cout << "Projectile inactive" << std::endl;
             }
         }
 

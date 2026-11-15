@@ -76,29 +76,13 @@ PlayMode::PlayMode() {
 	World::get_world()->play_mode = this;
 
 	glm::vec2 basket_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
-	auto basket = std::make_shared<Brawler>(basket_at, "Basket", 
-                                1000, // Health
-                                10,   // Resource Cost
-                                25,  // Attack Damage
-                                1.0f, // Attack Range
-                                1.5f, // Attack Rate (Intentionally slower)
-                                1.0f, // Movement Speed
-								3.0f, // Radius
-                                Team::BASKET);
+	auto basket = std::make_shared<Ranged>(basket_at, &data_assets.basket, Team::BASKET);
 
 	World::get_world()->troops.emplace_back(basket);
 	basket_ = basket;
 
 	glm::vec2 enemy_at = 0.5f * (World::get_world()->map.enemy_base_min() + World::get_world()->map.enemy_base_max());
-	auto enemy_basket = std::make_shared<Brawler>(enemy_at, "EnemyBasket",
-                                1000, // Health
-                                10,   // Resource Cost
-                                25,  // Attack Damage
-                                1.0f, // Attack Range
-                                1.5f, // Attack Rate
-                                1.0f, // Movement Speed
-								3.0f, // Radius
-                                Team::ENEMY_BASKET);
+	auto enemy_basket = std::make_shared<Ranged>(enemy_at, &data_assets.basket, Team::ENEMY_BASKET);
 	World::get_world()->troops.emplace_back(enemy_basket);
 	enemy_basket_ = enemy_basket;
 
@@ -136,11 +120,15 @@ static int anim_frame(float time, int frames) {
 }
 
 static char const *selected_troop_name(TroopType type) {
-	return type == TroopType::BANANA_RANGED ? "BananaRanged" : "CherryBrawler";
+	if (type == TroopType::BANANA_RANGED) return "BananaRanged";
+	if (type == TroopType::PINEAPPLE_HEALER) return "PineappleHealer";
+	
+	return "CherryBrawler";
 }
 
 static TroopType troop_type_from_name(std::string const &name) {
 	if (name == "BananaRanged") return TroopType::BANANA_RANGED;
+	if (name == "PineappleHealer") return TroopType::PINEAPPLE_HEALER;
 	return TroopType::CHERRY_BRAWLER;
 }
 
@@ -429,40 +417,26 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 	if (!World::get_world()->map.can_place(col, row)) return;
 
 	if (selected_troop == TroopType::CHERRY_BRAWLER){
-		if (resources_ < cherry_cost_) return;
+		if (resources_ < data_assets.cherry.resource_cost) return;
 
-		resources_ -= cherry_cost_;
+		resources_ -=  data_assets.cherry.resource_cost;
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
 
-		World::get_world()->troops.push_back(std::make_shared<Brawler>(
-			pos, "CherryBrawler",
-			100, 
-			cherry_cost_, 
-			25,
-			1.0f, 
-			1.0f, 
-			1.0f,
-			1.0f, // radius
-			Team::FRUIT
-		));
+		World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &data_assets.cherry, Team::FRUIT));
 	} 
 	else if (selected_troop == TroopType::BANANA_RANGED){
-		if (resources_ < banana_cost_) return;
+		if (resources_ < data_assets.banana.resource_cost) return;
 
-		resources_ -= banana_cost_;
+		resources_ -= data_assets.banana.resource_cost;
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
+		World::get_world()->troops.push_back(std::make_shared<Ranged>(pos, &data_assets.banana, Team::FRUIT));
+	} 
+	else if (selected_troop == TroopType::PINEAPPLE_HEALER){
+		if (resources_ < data_assets.pineapple.resource_cost) return;
 
-		World::get_world()->troops.push_back(std::make_shared<Ranged>(
-			pos, "BananaRanged",
-			75, 
-			banana_cost_, 
-			15, // damage
-			7.5f, // range
-			0.75f, // attack rate
-			1.25f, // speed
-			1.0f, // radius
-			Team::FRUIT
-		));
+		resources_ -= data_assets.pineapple.resource_cost;
+		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
+		World::get_world()->troops.push_back(std::make_shared<Healer>(pos, &data_assets.pineapple, Team::FRUIT));
 	}
 
 	
@@ -477,17 +451,7 @@ void PlayMode::spawn_vegetable_troop()
 	if (!World::get_world()->map.is_walkable(col, row)) return;
 	
 	glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-	World::get_world()->troops.push_back(std::make_shared<Brawler>(
-		pos, "RadishBrawler",
-		100, // Health
-		2,   // Resource Cost
-		25,  // Attack Damage
-		1.0f, // Attack Range
-		1.5f, // Attack Rate (Intentionally slower for testing purposes)
-		1.0f, // Movement Spee
-		1.0f, // Radius
-		Team::VEGETABLE)
-	);
+	World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &data_assets.cherry, Team::VEGETABLE));
 }
 
 void PlayMode::load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, float height) {
@@ -630,7 +594,8 @@ void PlayMode::load_troop_sprite() {
 	static CharacterAnimDesc const roster[] = {
 		{"CherryBrawler", "BlueTeam/Cherry/Walk/CherryBrawler_Walk-", 11, "BlueTeam/Cherry/Attack/CherryBrawler_Attack-", 11, false, true, false},
 		{"BananaRanged", "BlueTeam/Banana/Walk/BananaRanged_Walk-", 11, "BlueTeam/Banana/Attack/BananaRanged_Attack-", 16, false, true, true},
-		{"RadishBrawler", "RedTeam/Cherry/Walk/CherryBrawler_Walk-", 11, "RedTeam/Cherry/Attack/CherryBrawler_Attack-", 11, false, false, false},
+		{"PineappleHealer", "BlueTeam/Pineapple/Walk/PineappleHealer_Walk-", 1, "BlueTeam/Pineapple/Attack/PineappleHealer_Attack-", 1, false, true, true},
+		{"RadishBrawler", "RedTeam/Cherry/Walk/CherryBrawler_Walk-", 11, "RedTeam/Cherry/Attack/CherryBrawler_Attack-", 11, false, false, false} // should change this to take into account red and blue team
 	};
 	for (auto const &desc : roster) load_character(desc);
 	load_sprite_png("Projectiles/banana_projectile.png", projectile_tex_, projectile_uv_min_, projectile_uv_max_, projectile_half_, 0.2f);
