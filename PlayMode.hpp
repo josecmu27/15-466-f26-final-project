@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include "Brawler.hpp"
 #include "Ranged.hpp"
+#include "Healer.hpp"
 #include "DataAssets.hpp"
 
 #include <string>
@@ -18,7 +19,8 @@
 /* troop selection (note that the baskets are not included)*/
 enum TroopType {
 	CHERRY_BRAWLER, 
-	BANANA_RANGED
+	BANANA_RANGED,
+	PINEAPPLE_HEALER
 };
 
 struct PlayMode : Mode {

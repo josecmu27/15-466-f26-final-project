@@ -66,8 +66,6 @@ void World::handle_collisions()
             if (dist_squared <= radius_sum_squared){
                 troop->set_health(troop->get_health() - projectile->get_damage());
                 projectile->set_inactive();
-                std::cout << "Troop Hit" << std::endl;
-                std::cout << "Projectile inactive" << std::endl;
             }
         }
 

@@ -2,15 +2,17 @@
 
 #include "BrawlerDataAsset.hpp"
 #include "RangedDataAsset.hpp"
+#include "HealerDataAsset.hpp"
 
 struct DataAssets {
 	BrawlerDataAsset cherry;
 	RangedDataAsset banana;
     RangedDataAsset basket;
+	HealerDataAsset pineapple;
 
 	DataAssets() {
 		cherry.name = "CherryBrawler";
-		cherry.max_health = 100;
+		cherry.max_health = 200;
 		cherry.resource_cost = 10;
 		cherry.attack_damage = 25;
 		cherry.attack_range = 1.0f;
@@ -36,6 +38,16 @@ struct DataAssets {
 		basket.attack_range = 1.0f;
 		basket.attack_rate = 1.5f;
 		basket.movement_speed = 0.0f;
-		basket.troop_radius = 3.0f;
+		
+		pineapple.name = "PineappleHealer";
+		pineapple.max_health = 125;
+		pineapple.resource_cost = 15;
+		pineapple.attack_damage = 15;
+		pineapple.attack_range = 1.2f;
+		pineapple.attack_rate = 1.2f;
+		pineapple.movement_speed = 1.0f;
+		pineapple.troop_radius = 1.0f;
+		pineapple.heal_amount = 10;
+		pineapple.heal_radius = 2.5f;
 	}
 };

@@ -62,7 +62,6 @@ void Ranged::update(float elapsed)
         if (frame >= release_frame && shot_cycle != cycle){
             attack();
             shot_cycle = cycle;
-            std::cout << "Shooting banana!" << std::endl;
         }
     } else{
         shot_cycle = -1;
