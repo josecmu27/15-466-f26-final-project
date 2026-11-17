@@ -3,6 +3,8 @@
 
 struct TroopDataAsset {
     std::string name;
+    std::string label;
+    std::string description;
     int max_health = 100;
     int resource_cost = 10;
     int attack_damage = 10;

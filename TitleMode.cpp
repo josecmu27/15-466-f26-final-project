@@ -26,10 +26,11 @@ const glm::u8vec4 kGrassDark(58, 78, 36, 255);
 const glm::u8vec4 kCherry(196, 58, 52, 255);
 const glm::u8vec4 kCherryLight(222, 92, 70, 255);
 
-// Buttons, in ui space (both the same size):
-const glm::vec2 kStartCenter(0.0f, -0.04f);
-const glm::vec2 kQuitCenter(0.0f, -0.31f);
-const glm::vec2 kButtonHalf(0.34f, 0.11f);
+// Buttons, in ui space (all the same size):
+const glm::vec2 kStartCenter(0.0f, 0.10f);
+const glm::vec2 kHowCenter(0.0f, -0.14f);
+const glm::vec2 kQuitCenter(0.0f, -0.38f);
+const glm::vec2 kButtonHalf(0.46f, 0.09f);
 
 bool inside_button(glm::vec2 ui, glm::vec2 center) {
 	glm::vec2 d = glm::abs(ui - center);
@@ -215,6 +216,7 @@ glm::vec2 TitleMode::mouse_ui() const {
 
 TitleMode::Button TitleMode::button_at(glm::vec2 ui) const {
 	if (inside_button(ui, kStartCenter)) return Button::Start;
+	if (inside_button(ui, kHowCenter)) return Button::How;
 	if (inside_button(ui, kQuitCenter)) return Button::Quit;
 	return Button::None;
 }
@@ -243,6 +245,7 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 		Button released = button_at(mouse_ui());
 		if (released != Button::None && released == pressing_) {
 			if (released == Button::Start) start_requested_ = true;
+			else if (released == Button::How) how_requested_ = true;
 			else quit();
 		}
 		pressing_ = Button::None;
@@ -265,6 +268,11 @@ void TitleMode::update(float elapsed) {
 	time_ += elapsed;
 	hover_ = button_at(mouse_ui());
 
+	if (how_requested_) {
+		auto keep_alive = shared_from_this();
+		Mode::set_current(std::make_shared< PlayMode >(true));
+		return;
+	}
 	if (start_requested_) {
 		// Keep this mode alive until update() returns; set_current drops the last other reference.
 		auto keep_alive = shared_from_this();
@@ -293,7 +301,7 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 	float card_hw = std::min(asp - 0.08f, 1.7f);
 	glm::vec2 card_min(-card_hw, -0.92f);
 	glm::vec2 card_max(card_hw, 0.92f);
-	float meadow_top = -0.46f;
+	float meadow_top = -0.52f;
 
 	Mesh shapes;
 	{
@@ -340,6 +348,7 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		paint_outline(shapes, body, 0.02f, kInk, true);
 	};
 	paint_button(Button::Start, kStartCenter, kCherry, kCherryLight);
+	paint_button(Button::How, kHowCenter, kPaperShade, kPaperLight);
 	paint_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight);
 
 	glBindBuffer(GL_ARRAY_BUFFER, shapes_vbo_);
@@ -359,8 +368,9 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		draw_bold_text(text, *title_font, kTitle, glm::vec2(0.0f, 0.42f) + glm::vec2(0.012f, -0.012f), title_h, 0.006f, kInk);
 		draw_bold_text(text, *title_font, kTitle, glm::vec2(0.0f, 0.42f), title_h, 0.004f, kCherry);
 
-		draw_bold_text(text, *ui_font, "START", kStartCenter + button_lift(Button::Start), 0.14f, 0.002f, kPaper);
-		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.14f, 0.002f, kInk);
+		draw_bold_text(text, *ui_font, "START", kStartCenter + button_lift(Button::Start), 0.11f, 0.002f, kPaper);
+		draw_bold_text(text, *ui_font, "HOW TO PLAY", kHowCenter + button_lift(Button::How), 0.09f, 0.002f, kInk);
+		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.11f, 0.002f, kInk);
 	}
 
 	{ // Film overlay last, already in clip space, so it covers the whole screen including text.

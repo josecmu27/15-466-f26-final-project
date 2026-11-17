@@ -36,6 +36,7 @@ public:
     PlayMode* play_mode = nullptr;
 
     void update(float elapsed);
+    void clear();
 
     void handle_collisions();
     void cleanup_defeated_troops();

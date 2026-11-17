@@ -5,8 +5,8 @@
  *
  * Draws in "ui space": y runs from -1 (bottom) to 1 (top), x from -aspect to
  * aspect, so layout does not stretch when the window is resized.
- * Clicking START or pressing Enter/Space switches to PlayMode;
- * clicking QUIT or pressing Escape closes the game.
+ * Clicking START or pressing Enter/Space switches to PlayMode.
+ * Clicking HOW TO PLAY opens the tutorial. Clicking QUIT or pressing Escape closes the game.
  */
 
 #include "Mode.hpp"
@@ -33,12 +33,13 @@ struct TitleMode : Mode {
 private:
 	float time_ = 0.0f; // drives the film grain/scratch flicker
 	bool start_requested_ = false;
+	bool how_requested_ = false;
 
 	glm::uvec2 window_size_ = glm::uvec2(1280, 720);
 	glm::uvec2 drawable_size_ = glm::uvec2(1280, 720);
 	glm::vec2 mouse_ = glm::vec2(0.0f);
 
-	enum class Button { None, Start, Quit };
+	enum class Button { None, Start, How, Quit };
 	Button hover_ = Button::None;
 	Button pressing_ = Button::None; // button the left mouse went down on
 

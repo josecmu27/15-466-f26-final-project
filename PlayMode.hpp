@@ -24,7 +24,7 @@ enum TroopType {
 };
 
 struct PlayMode : Mode {
-	PlayMode();
+	explicit PlayMode(bool practice = false);
 	virtual ~PlayMode();
 
 	virtual bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
@@ -70,6 +70,7 @@ struct PlayMode : Mode {
 	std::weak_ptr< Troop > enemy_basket_;
 	bool won_ = false;
 	bool lost_ = false;
+	bool restart_ = false;
 
 	GLuint troop_vbo_ = 0;
 	GLuint troop_vao_ = 0;
@@ -95,8 +96,22 @@ struct PlayMode : Mode {
 	float troop_spawn_timer = 0.0f;
 
 	void spawn_vegetable_troop();
+	void advance_practice();
+	void spawn_practice_enemy();
+	void draw_practice_hints(glm::mat4 const &clip);
+	void draw_practice_banner();
+	bool practice_button(glm::vec2 mouse, bool &start_game) const;
+	void draw_troop_description();
+	TroopDataAsset const *asset_for(std::string const &name) const;
 
 	TroopType selected_troop = TroopType::CHERRY_BRAWLER;
 
 	DataAssets data_assets;
+
+	// Guided practice opened from the title screen. lesson_ 0..3 are the cherry tasks; 4 is the summary.
+	bool practice_ = false;
+	int lesson_ = 0;
+	bool leave_practice_ = false;
+	bool start_real_ = false;
+	BrawlerDataAsset practice_enemy_data;
 };

@@ -1,5 +1,6 @@
 #include "PlayMode.hpp"
 #include "Ranged.hpp"
+#include "TitleMode.hpp"
 
 #include "ColorProgram.hpp"
 #include "ColorTextureProgram.hpp"
@@ -17,6 +18,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 #include <limits>
 #include <set>
@@ -64,7 +66,7 @@ void add_foot_shadow(std::vector< ColorVertex > &verts, glm::vec2 center, glm::v
 
 }
 
-PlayMode::PlayMode() {
+PlayMode::PlayMode(bool practice) : practice_(practice) {
 	int w = 0, h = 0;
 	SDL_GetWindowSize(Mode::window, &w, &h);
 	if (w > 0 && h > 0) window_size = glm::uvec2((unsigned)w, (unsigned)h);
@@ -74,6 +76,7 @@ PlayMode::PlayMode() {
 	mouse = glm::vec2(mx, my);
 
 	World::get_world()->play_mode = this;
+	World::get_world()->clear();
 
 	glm::vec2 basket_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
 	auto basket = std::make_shared<Ranged>(basket_at, &data_assets.basket, Team::BASKET);
@@ -112,6 +115,20 @@ PlayMode::~PlayMode() {
 
 static const float troop_size = 0.7f;
 
+static glm::vec2 restart_center() { return glm::vec2(0.0f, -0.42f); }
+static glm::vec2 restart_half() { return glm::vec2(0.26f, 0.065f); }
+
+static bool pointer_on_restart(glm::vec2 mouse, glm::uvec2 window) {
+	if (window.x == 0 || window.y == 0) return false;
+	glm::vec2 at(
+		(restart_center().x * 0.5f + 0.5f) * float(window.x),
+		(0.5f - restart_center().y * 0.5f) * float(window.y)
+	);
+	glm::vec2 half = restart_half();
+	glm::vec2 span(half.x * 0.5f * float(window.x), half.y * 0.5f * float(window.y));
+	return std::abs(mouse.x - at.x) <= span.x && std::abs(mouse.y - at.y) <= span.y;
+}
+
 static int anim_frame(float time, int frames) {
 	if (frames <= 0) return 0;
 	int frame = (int)std::floor(time * 12.0f) % frames;
@@ -138,12 +155,33 @@ static bool troop_overlaps(glm::vec2 pos, glm::vec2 mn, glm::vec2 mx) {
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_) {
 	window_size = window_size_;
+	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_ESCAPE && practice_) {
+		leave_practice_ = true;
+		return true;
+	}
+	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT && practice_) {
+		mouse = glm::vec2(evt.button.x, evt.button.y);
+		bool start_game = false;
+		if (practice_button(mouse, start_game)) return true;
+	}
 	if (evt.type == SDL_EVENT_MOUSE_MOTION) {
 		mouse = glm::vec2(evt.motion.x, evt.motion.y);
 		if (box_dragging_) mouse_to_world(box_end_);
 		return true;
 	}
-	if (won_ || lost_) return false;
+	if (won_ || lost_) {
+		if (evt.type == SDL_EVENT_KEY_DOWN && (evt.key.key == SDLK_RETURN || evt.key.key == SDLK_R)) {
+			restart_ = true;
+			return true;
+		}
+		if ((evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN || evt.type == SDL_EVENT_MOUSE_BUTTON_UP)
+			&& evt.button.button == SDL_BUTTON_LEFT) {
+			mouse = glm::vec2(evt.button.x, evt.button.y);
+			if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP && pointer_on_restart(mouse, window_size)) restart_ = true;
+			return true;
+		}
+		return false;
+	}
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		dragging_ = pointer_on_slot();
@@ -153,6 +191,16 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 	}
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
+		if (practice_) {
+			bool start_game = false;
+			if (practice_button(mouse, start_game)) {
+				if (start_game) start_real_ = true;
+				else leave_practice_ = true;
+				dragging_ = false;
+				box_dragging_ = false;
+				return true;
+			}
+		}
 		if (dragging_) {
 			glm::vec3 hit;
 			if (mouse_to_world(hit)) place_troop(glm::vec2(hit));
@@ -227,6 +275,25 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 }
 
 void PlayMode::update(float elapsed) {
+	if (practice_) {
+		time_ += elapsed;
+		advance_practice();
+		if (leave_practice_ || start_real_) {
+			auto keep_alive = shared_from_this();
+			if (start_real_) Mode::set_current(std::make_shared< PlayMode >());
+			else Mode::set_current(std::make_shared< TitleMode >());
+			return;
+		}
+		World::get_world()->update(elapsed);
+		return;
+	}
+
+	if (restart_) {
+		auto keep_alive = shared_from_this();
+		Mode::set_current(std::make_shared< PlayMode >());
+		return;
+	}
+
 	if (paused_ || won_ || lost_) return;
 
 	time_ += elapsed;
@@ -267,6 +334,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	refresh_hover();
 	World::get_world()->map.draw(clip, time_, hover_col, hover_row, {});
 	draw_troops(clip);
+	if (practice_) draw_practice_hints(clip);
 	World::get_world()->map.draw_film(glm::mat4(1.0f), time_);
 	if (paused_) draw_pause_overlay();
 	if (dragging_ && World::get_world()->map.can_place(hover_col, hover_row)) {
@@ -300,6 +368,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	glViewport(0, 0, (GLsizei)drawable_size.x, (GLsizei)drawable_size.y);
 	draw_bar();
 	draw_unit_stats();
+	if (practice_) draw_practice_banner();
 	if (won_) draw_victory_overlay();
 	else if (lost_) draw_defeat_overlay();
 
@@ -452,6 +521,247 @@ void PlayMode::spawn_vegetable_troop()
 	
 	glm::vec2 pos(World::get_world()->map.cell_center(col, row));
 	World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &data_assets.cherry, Team::VEGETABLE));
+}
+
+namespace {
+
+char const *practice_prompt(int lesson) {
+	switch (lesson) {
+		case 0: return "Drag the cherry from the bar onto your side.";
+		case 1: return "Drag a box around the cherry to select it.";
+		case 2: return "Right-click open ground. The flag is one example.";
+		case 3: return "Right-click the radish to attack it.";
+		default: return "Destroy the enemy basket on the right to win.";
+	}
+}
+
+std::shared_ptr< Troop > first_named(char const *name) {
+	for (auto const &troop : World::get_world()->troops) {
+		if (troop && !troop->is_dead() && troop->get_name() == name) return troop;
+	}
+	return nullptr;
+}
+
+bool fruit_has_order(OrderType type) {
+	for (auto const &troop : World::get_world()->troops) {
+		if (!troop || troop->is_dead() || troop->get_team() != Team::FRUIT) continue;
+		if (troop->get_order().type == type) return true;
+	}
+	return false;
+}
+
+glm::vec2 window_from_clip(glm::vec2 clip, glm::uvec2 window) {
+	return glm::vec2(
+		(clip.x * 0.5f + 0.5f) * float(window.x),
+		(0.5f - clip.y * 0.5f) * float(window.y)
+	);
+}
+
+} // namespace
+
+void PlayMode::spawn_practice_enemy() {
+	Map &map = World::get_world()->map;
+	int row = map.rows() / 2;
+	for (int col = map.cols() - 1; col >= 0; --col) {
+		if (!map.is_walkable(col, row) || map.can_place(col, row)) continue;
+		glm::vec2 pos(map.cell_center(col, row));
+		practice_enemy_data = data_assets.cherry;
+		practice_enemy_data.name = "RadishBrawler";
+		practice_enemy_data.label = "Radish";
+		World::get_world()->troops.push_back(std::make_shared<Brawler>(
+			pos, &practice_enemy_data, Team::VEGETABLE));
+		return;
+	}
+}
+
+void PlayMode::advance_practice() {
+	if (lesson_ == 0 && first_named("CherryBrawler")) lesson_ = 1;
+	if (lesson_ == 1) {
+		for (auto const &troop : World::get_world()->troops) {
+			if (troop && !troop->is_dead() && troop->get_name() == "CherryBrawler" && troop->is_selected()) {
+				lesson_ = 2;
+				break;
+			}
+		}
+	}
+	if (lesson_ == 2 && fruit_has_order(OrderType::Move)) lesson_ = 3;
+	if (lesson_ == 3) {
+		if (!first_named("RadishBrawler") && !fruit_has_order(OrderType::Attack)) spawn_practice_enemy();
+		if (fruit_has_order(OrderType::Attack)) lesson_ = 4;
+	}
+}
+
+bool PlayMode::practice_button(glm::vec2 mouse, bool &start_game) const {
+	if (!practice_ || lesson_ < 4 || window_size.x == 0 || window_size.y == 0) return false;
+	struct Choice { glm::vec2 center; bool start; };
+	Choice choices[2] = {
+		{glm::vec2(-0.28f, 0.62f), true},
+		{glm::vec2(0.28f, 0.62f), false},
+	};
+	glm::vec2 half(0.20f, 0.065f);
+	for (Choice choice : choices) {
+		glm::vec2 at = window_from_clip(choice.center, window_size);
+		glm::vec2 span(half.x * float(window_size.x), half.y * float(window_size.y));
+		if (std::abs(mouse.x - at.x) <= span.x && std::abs(mouse.y - at.y) <= span.y) {
+			start_game = choice.start;
+			return true;
+		}
+	}
+	return false;
+}
+
+void PlayMode::draw_practice_hints(glm::mat4 const &clip) {
+	if (bar_vao_ == 0) return;
+	struct ColorVertex {
+		glm::vec3 Position;
+		glm::u8vec4 Color;
+	};
+	std::vector< ColorVertex > verts;
+	auto rect = [&](glm::vec2 mn, glm::vec2 mx, glm::u8vec4 color) {
+		verts.push_back({glm::vec3(mn.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
+		verts.push_back({glm::vec3(mn.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
+		verts.push_back({glm::vec3(mn.x, mx.y, 0.0f), color});
+	};
+	float pulse = 0.5f + 0.5f * std::sin(time_ * 4.0f);
+	glm::u8vec4 ink(255, 214, 90, (uint8_t)std::lround(140.0f + 80.0f * pulse));
+
+	if (lesson_ == 1 || lesson_ == 2) {
+		std::shared_ptr< Troop > fruit;
+		for (auto const &troop : World::get_world()->troops) {
+			if (troop && !troop->is_dead() && troop->get_team() == Team::FRUIT) { fruit = troop; break; }
+		}
+		if (fruit) {
+			glm::vec2 at = fruit->get_position();
+			if (lesson_ == 1) {
+				float reach = glm::mix(0.35f, 1.5f, pulse);
+				rect(at - glm::vec2(reach), at + glm::vec2(reach), glm::u8vec4(255, 214, 90, 50));
+				float t = 0.08f;
+				rect(at + glm::vec2(-reach, reach - t), at + glm::vec2(reach, reach), ink);
+				rect(at + glm::vec2(-reach, -reach), at + glm::vec2(reach, -reach + t), ink);
+				rect(at + glm::vec2(-reach, -reach), at + glm::vec2(-reach + t, reach), ink);
+				rect(at + glm::vec2(reach - t, -reach), at + glm::vec2(reach, reach), ink);
+			} else {
+				Map &map = World::get_world()->map;
+				int col = 0, row = 0;
+				if (map.world_to_cell(glm::vec3(at, 0.0f), col, row)) {
+					int dest = std::min(col + 3, map.cols() - 1);
+					if (map.is_walkable(dest, row)) {
+						glm::vec2 flag(map.cell_center(dest, row));
+						rect(flag + glm::vec2(-0.08f, -0.7f), flag + glm::vec2(0.08f, 0.55f), ink);
+						verts.push_back({glm::vec3(flag.x, flag.y + 0.85f, 0.0f), ink});
+						verts.push_back({glm::vec3(flag.x + 0.7f, flag.y + 0.55f, 0.0f), ink});
+						verts.push_back({glm::vec3(flag.x, flag.y + 0.25f, 0.0f), ink});
+					}
+				}
+			}
+		}
+	}
+	if (lesson_ == 3) {
+		auto enemy = first_named("RadishBrawler");
+		if (enemy) {
+			glm::vec2 at = enemy->get_position();
+			float radius = glm::mix(0.9f, 1.35f, pulse);
+			constexpr int segs = 18;
+			for (int i = 0; i < segs; ++i) {
+				float a0 = float(i) / float(segs) * 6.2831853f;
+				float a1 = float(i + 1) / float(segs) * 6.2831853f;
+				glm::vec2 p0 = at + radius * glm::vec2(std::cos(a0), std::sin(a0));
+				glm::vec2 p1 = at + radius * glm::vec2(std::cos(a1), std::sin(a1));
+				glm::vec2 q0 = at + (radius + 0.12f) * glm::vec2(std::cos(a0), std::sin(a0));
+				glm::vec2 q1 = at + (radius + 0.12f) * glm::vec2(std::cos(a1), std::sin(a1));
+				verts.push_back({glm::vec3(p0, 0.0f), ink});
+				verts.push_back({glm::vec3(q0, 0.0f), ink});
+				verts.push_back({glm::vec3(q1, 0.0f), ink});
+				verts.push_back({glm::vec3(p0, 0.0f), ink});
+				verts.push_back({glm::vec3(q1, 0.0f), ink});
+				verts.push_back({glm::vec3(p1, 0.0f), ink});
+			}
+		}
+	}
+	if (verts.empty()) return;
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(ColorVertex), verts.data(), GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(clip));
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+}
+
+void PlayMode::draw_practice_banner() {
+	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
+	struct ColorVertex {
+		glm::vec3 Position;
+		glm::u8vec4 Color;
+	};
+	std::vector< ColorVertex > verts;
+	auto rect = [&](glm::vec2 mn, glm::vec2 mx, glm::u8vec4 color) {
+		verts.push_back({glm::vec3(mn.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
+		verts.push_back({glm::vec3(mn.x, mn.y, 0.0f), color});
+		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
+		verts.push_back({glm::vec3(mn.x, mx.y, 0.0f), color});
+	};
+	std::string prompt = practice_prompt(lesson_);
+	float prompt_advance = 0.0f;
+	ui_font->layout(prompt, &prompt_advance);
+	float prompt_h = 0.05f;
+	float prompt_px = (prompt_h * 0.5f * float(window_size.y)) / float(ui_font->pixel_height);
+	float prompt_w = prompt_advance * prompt_px * (2.0f / float(window_size.x));
+	float pad_x = 0.045f;
+	float pad_y = 0.016f;
+	float prompt_cy = 0.90f;
+	float half_w = std::min(0.5f * prompt_w + pad_x, 0.72f);
+	rect(glm::vec2(-half_w, prompt_cy - prompt_h * 0.5f - pad_y), glm::vec2(half_w, prompt_cy + prompt_h * 0.5f + pad_y), glm::u8vec4(236, 222, 186, 230));
+	if (lesson_ >= 4) {
+		rect(glm::vec2(-0.48f, 0.555f), glm::vec2(-0.08f, 0.685f), glm::u8vec4(196, 58, 52, 255));
+		rect(glm::vec2(0.08f, 0.555f), glm::vec2(0.48f, 0.685f), glm::u8vec4(214, 194, 150, 255));
+	}
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(ColorVertex), verts.data(), GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+
+	// Clip x and y both span -1..1, so the same scale stretches glyphs on a wide window.
+	float px_w = 2.0f / float(window_size.x);
+	float px_h = 2.0f / float(window_size.y);
+	auto place_text = [&](std::string const &text, glm::vec2 center, float height) {
+		float advance = 0.0f;
+		ui_font->layout(text, &advance);
+		float glyph_px = (height * 0.5f * float(window_size.y)) / float(ui_font->pixel_height);
+		float scale_x = glyph_px * px_w;
+		float scale_y = glyph_px * px_h;
+		glm::vec3 anchor(center.x - 0.5f * advance * scale_x, center.y - kFontCapCenter * height, 0.0f);
+		return std::tuple(anchor, glm::vec3(scale_x, 0.0f, 0.0f), glm::vec3(0.0f, scale_y, 0.0f));
+	};
+	{
+		TextRenderer renderer(glm::mat4(1.0f));
+		auto [anchor, x_axis, y_axis] = place_text(prompt, glm::vec2(0.0f, prompt_cy), prompt_h);
+		renderer.draw_text(*ui_font, prompt, anchor, x_axis, y_axis, glm::u8vec4(27, 16, 18, 255));
+		if (lesson_ >= 4) {
+			auto label = [&](std::string const &text, glm::vec2 center, glm::u8vec4 color) {
+				auto [at, sx, sy] = place_text(text, center, 0.055f);
+				renderer.draw_text(*ui_font, text, at, sx, sy, color);
+			};
+			label("PLAY", glm::vec2(-0.28f, 0.62f), glm::u8vec4(255, 236, 196, 255));
+			label("TITLE", glm::vec2(0.28f, 0.62f), glm::u8vec4(27, 16, 18, 255));
+		}
+	}
 }
 
 void PlayMode::load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, float height) {
@@ -873,6 +1183,121 @@ void PlayMode::draw_sprite(glm::mat4 const &clip, glm::vec2 center, glm::vec2 ha
 	glDisable(GL_BLEND);
 }
 
+TroopDataAsset const *PlayMode::asset_for(std::string const &name) const {
+	if (name == data_assets.cherry.name) return &data_assets.cherry;
+	if (name == data_assets.banana.name) return &data_assets.banana;
+	if (name == data_assets.pineapple.name) return &data_assets.pineapple;
+	if (name == data_assets.basket.name) return &data_assets.basket;
+	return nullptr;
+}
+
+void PlayMode::draw_troop_description() {
+	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
+
+	TroopDataAsset const *asset = nullptr;
+	BarPlaces slot = bar_places(window_size, bar_frac_);
+	int index = 0;
+	for (auto const &anim : characters_) {
+		if (!anim.show_in_bar) continue;
+		float x = bar_slot_x(slot, index);
+		++index;
+		if (mouse.x >= x && mouse.x <= x + slot.side
+			&& mouse.y >= slot.slot_y && mouse.y <= slot.slot_y + slot.side) {
+			asset = asset_for(anim.troop_name);
+			break;
+		}
+	}
+	if (asset == nullptr || (asset->label.empty() && asset->description.empty())) return;
+
+	std::string title = asset->label;
+	std::string body = asset->description;
+
+	std::string first = body;
+	std::string second;
+	size_t split = first.find('\n');
+	if (split != std::string::npos) {
+		second = first.substr(split + 1);
+		first = first.substr(0, split);
+	}
+
+	float title_px = float(window_size.y) * 0.034f;
+	float body_px = float(window_size.y) * 0.026f;
+	float pad = body_px * 0.7f;
+	float gap = body_px * 0.28f;
+	auto text_px = [&](std::string const &text, float line_px) {
+		if (text.empty() || ui_font->pixel_height == 0) return 0.0f;
+		float advance = 0.0f;
+		ui_font->layout(text, &advance);
+		return advance * (line_px / float(ui_font->pixel_height));
+	};
+	float card_w = std::max(text_px(title, title_px), std::max(text_px(first, body_px), text_px(second, body_px))) + pad * 2.0f;
+	float card_h = pad + title_px + gap + body_px;
+	if (!second.empty()) card_h += gap + body_px;
+	card_h += pad;
+
+	float px_w = 2.0f / float(window_size.x);
+	float px_h = 2.0f / float(window_size.y);
+	float gap_px = 14.0f;
+	float left = mouse.x + gap_px;
+	float top_px = mouse.y - gap_px - card_h;
+	if (left + card_w > float(window_size.x) - 8.0f) left = mouse.x - gap_px - card_w;
+	if (top_px < 8.0f) top_px = mouse.y + gap_px;
+	left = std::clamp(left, 8.0f, std::max(8.0f, float(window_size.x) - card_w - 8.0f));
+	top_px = std::clamp(top_px, 8.0f, std::max(8.0f, float(window_size.y) - card_h - 8.0f));
+
+	glm::vec2 card_min(-1.0f + left * px_w, 1.0f - (top_px + card_h) * px_h);
+	glm::vec2 card_max(-1.0f + (left + card_w) * px_w, 1.0f - top_px * px_h);
+
+	struct ColorVertex {
+		glm::vec3 Position;
+		glm::u8vec4 Color;
+	};
+	auto quad = [](glm::vec2 mn, glm::vec2 mx, glm::u8vec4 color, ColorVertex *out) {
+		out[0] = {glm::vec3(mn, 0.0f), color};
+		out[1] = {glm::vec3(mx.x, mn.y, 0.0f), color};
+		out[2] = {glm::vec3(mx, 0.0f), color};
+		out[3] = {glm::vec3(mn, 0.0f), color};
+		out[4] = {glm::vec3(mx, 0.0f), color};
+		out[5] = {glm::vec3(mn.x, mx.y, 0.0f), color};
+	};
+	ColorVertex card[12];
+	float border = 3.0f;
+	quad(card_min - glm::vec2(border * px_w, border * px_h), card_max + glm::vec2(border * px_w, border * px_h), glm::u8vec4(92, 48, 28, 150), card);
+	quad(card_min, card_max, glm::u8vec4(248, 236, 204, 170), card + 6);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(card), card, GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glDrawArrays(GL_TRIANGLES, 0, 12);
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+
+	{
+		TextRenderer renderer(glm::mat4(1.0f));
+		auto draw_line = [&](std::string const &text, float y_px, float line_px, glm::u8vec4 color) {
+			if (text.empty()) return;
+			float scale = line_px / float(ui_font->pixel_height);
+			glm::vec3 anchor(
+				-1.0f + (left + pad) * px_w,
+				1.0f - (y_px + line_px) * px_h,
+				0.0f
+			);
+			renderer.draw_text(*ui_font, text, anchor, glm::vec3(scale * px_w, 0.0f, 0.0f), glm::vec3(0.0f, scale * px_h, 0.0f), color);
+		};
+		float y = top_px + pad;
+		draw_line(title, y, title_px, glm::u8vec4(176, 48, 40, 255));
+		y += title_px + gap;
+		draw_line(first, y, body_px, glm::u8vec4(27, 16, 18, 255));
+		if (!second.empty()) draw_line(second, y + body_px + gap, body_px, glm::u8vec4(27, 16, 18, 255));
+	}
+	glDisable(GL_BLEND);
+}
+
 // Counts living fighters on each side; the baskets are bases, so they aren't included.
 void PlayMode::draw_unit_stats() {
 	if (window_size.x == 0 || window_size.y == 0) return;
@@ -942,6 +1367,20 @@ void PlayMode::draw_end_overlay(std::string const &label, glm::u8vec4 color) {
 	glBindVertexArray(bar_vao_);
 	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
 	glDrawArrays(GL_TRIANGLES, 0, 6);
+
+	glm::vec2 restart_min = restart_center() - restart_half();
+	glm::vec2 restart_max = restart_center() + restart_half();
+	glm::u8vec4 restart_fill(196, 58, 52, 255);
+	ColorVertex restart_rect[6] = {
+		{glm::vec3(restart_min, 0.0f), restart_fill},
+		{glm::vec3(restart_max.x, restart_min.y, 0.0f), restart_fill},
+		{glm::vec3(restart_max, 0.0f), restart_fill},
+		{glm::vec3(restart_min, 0.0f), restart_fill},
+		{glm::vec3(restart_max, 0.0f), restart_fill},
+		{glm::vec3(restart_min.x, restart_max.y, 0.0f), restart_fill},
+	};
+	glBufferData(GL_ARRAY_BUFFER, sizeof(restart_rect), restart_rect, GL_DYNAMIC_DRAW);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glUseProgram(0);
@@ -965,6 +1404,20 @@ void PlayMode::draw_end_overlay(std::string const &label, glm::u8vec4 color) {
 				renderer.draw_text(*title_font, label, anchor + glm::vec3(float(dx) * 1.5f * px_w, float(dy) * 1.5f * px_h, 0.0f), x_axis, y_axis, color);
 			}
 		}
+
+		std::string restart_label = "RESTART";
+		float restart_advance = 0.0f;
+		ui_font->layout(restart_label, &restart_advance);
+		float restart_h = restart_half().y * 1.15f;
+		float glyph_px = (restart_h * 0.5f * float(window_size.y)) / float(ui_font->pixel_height);
+		float restart_sx = glyph_px * px_w;
+		float restart_sy = glyph_px * px_h;
+		glm::vec3 restart_at(
+			restart_center().x - 0.5f * restart_advance * restart_sx,
+			restart_center().y - kFontCapCenter * restart_h,
+			0.0f
+		);
+		renderer.draw_text(*ui_font, restart_label, restart_at, glm::vec3(restart_sx, 0.0f, 0.0f), glm::vec3(0.0f, restart_sy, 0.0f), glm::u8vec4(255, 236, 196, 255));
 	}
 	glDisable(GL_BLEND);
 }
@@ -1149,6 +1602,48 @@ void PlayMode::draw_bar() {
 	}
 	glDisable(GL_BLEND);
 
+	if (practice_ && lesson_ == 0) {
+		int slot_index = 0;
+		for (auto const &anim : characters_) {
+			if (!anim.show_in_bar) continue;
+			if (slot_index == 0) {
+				float x = bar_slot_x(place, slot_index);
+				float grow = 6.0f + 4.0f * std::sin(time_ * 5.0f);
+				glm::vec2 mn(ndc_x(x - grow), ndc_y(place.slot_y + side + grow));
+				glm::vec2 mx(ndc_x(x + side + grow), ndc_y(place.slot_y - grow));
+				float t = ndc_w(5.0f);
+				ColorVertex frame[24];
+				auto edge = [&](int base, glm::vec2 a, glm::vec2 b) {
+					glm::u8vec4 gold(255, 210, 70, 255);
+					frame[base + 0] = {glm::vec3(a, 0.0f), gold};
+					frame[base + 1] = {glm::vec3(b.x, a.y, 0.0f), gold};
+					frame[base + 2] = {glm::vec3(b, 0.0f), gold};
+					frame[base + 3] = {glm::vec3(a, 0.0f), gold};
+					frame[base + 4] = {glm::vec3(b, 0.0f), gold};
+					frame[base + 5] = {glm::vec3(a.x, b.y, 0.0f), gold};
+				};
+				edge(0, mn, glm::vec2(mx.x, mn.y + t));
+				edge(6, glm::vec2(mn.x, mx.y - t), mx);
+				edge(12, mn, glm::vec2(mn.x + t, mx.y));
+				edge(18, glm::vec2(mx.x - t, mn.y), mx);
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+				glBufferData(GL_ARRAY_BUFFER, sizeof(frame), frame, GL_DYNAMIC_DRAW);
+				glUseProgram(color_program->program);
+				glBindVertexArray(bar_vao_);
+				glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+				glDrawArrays(GL_TRIANGLES, 0, 24);
+				glBindVertexArray(0);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				glUseProgram(0);
+				glDisable(GL_BLEND);
+				break;
+			}
+			++slot_index;
+		}
+	}
+
 	if (dragging_ && !World::get_world()->map.can_place(hover_col, hover_row)) {
 		glm::vec2 cursor(ndc_x(mouse.x), ndc_y(mouse.y));
 		CharacterAnim const *anim = find_anim(selected_troop_name(selected_troop));
@@ -1157,4 +1652,6 @@ void PlayMode::draw_bar() {
 			draw_sprite(glm::mat4(1.0f), cursor, ghost_half, glm::u8vec4(255, 255, 255, 210), anim->walk.frames[0], anim->walk.uv_min, anim->walk.uv_max);
 		}
 	}
+
+	draw_troop_description();
 }

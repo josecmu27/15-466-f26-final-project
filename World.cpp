@@ -2,6 +2,12 @@
 
 World* World::instance = nullptr;
 
+void World::clear()
+{
+    troops.clear();
+    projectiles.clear();
+}
+
 void World::update(float elapsed)
 {
     glm::vec2 left(map.bounds_min());
