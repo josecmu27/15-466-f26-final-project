@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
 
 	//------------  initialization ------------
 
-	bool do_skip_intro = false;
+	bool do_skip_intro = true;
 
 	for (int argi = 1; argi < argc; ++argi) {
 		std::string arg = argv[argi];
