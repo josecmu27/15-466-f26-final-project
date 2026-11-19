@@ -11,6 +11,7 @@
 #include "Brawler.hpp"
 #include "Ranged.hpp"
 #include "Healer.hpp"
+#include "Flyer.hpp"
 #include "DataAssets.hpp"
 
 #include <string>
@@ -20,7 +21,8 @@
 enum TroopType {
 	CHERRY_BRAWLER, 
 	BANANA_RANGED,
-	PINEAPPLE_HEALER
+	PINEAPPLE_HEALER,
+	ORANGE_FLYER
 };
 
 struct PlayMode : Mode {
