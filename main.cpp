@@ -1,6 +1,8 @@
 //Mode.hpp declares the "Mode::current" static member variable, which is used to decide where event-handling, updating, and drawing events go:
 #include "Mode.hpp"
 
+#include "GP26IntroMode.hpp"
+
 //The 'TitleMode' mode shows the start screen, then switches to 'PlayMode':
 #include "TitleMode.hpp"
 
@@ -48,6 +50,17 @@ int main(int argc, char **argv) {
 
 	//------------  initialization ------------
 
+	bool do_skip_intro = false;
+
+	for (int argi = 1; argi < argc; ++argi) {
+		std::string arg = argv[argi];
+		if (arg == "--skip-intro") {
+			do_skip_intro = true;
+		} else {
+			std::cerr << "WARNING: ignoring argument '" << arg << "'." << std::endl;
+		}
+	}
+	
 	//Initialize SDL library:
 	SDL_Init(SDL_INIT_VIDEO);
 
@@ -115,7 +128,15 @@ int main(int argc, char **argv) {
 	call_load_functions();
 
 	//------------ create game mode + make current --------------
-	Mode::set_current(std::make_shared< TitleMode >());
+	{ //create mode:
+		auto intro = std::make_shared< GP26IntroMode >( [](){
+			Mode::set_current(std::make_shared< TitleMode >());
+		} );
+		if (do_skip_intro) {
+			intro->time = 10.0f; //force intro to end immediately
+		}
+		Mode::set_current( intro );
+	}
 
 	//------------ main loop ------------
 
