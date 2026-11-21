@@ -89,8 +89,8 @@ void Flyer::attack()
         if (!troop || troop->is_dead()) continue;
         
         // check if friendly troop
-        if (troop->get_team() == team || (team == Team::FRUIT & troop->get_team() == Team::BASKET) || 
-            (team == Team::VEGETABLE && troop->get_team() == Team::ENEMY_BASKET)) continue;
+        if (troop->get_team() == team || (team == Team::BLUE & troop->get_team() == Team::BASKET) || 
+            (team == Team::RED && troop->get_team() == Team::ENEMY_BASKET)) continue;
 
         if (glm::distance(position, troop->get_position()) <= flyer_data->splash_radius){
             troop->take_damage(flyer_data->attack_damage);
@@ -127,8 +127,8 @@ void Flyer::determine_target()
     for (auto const &troop : World::get_world()->troops){
         if (!troop || troop.get() == this) continue;
         if (troop->get_team() == team || troop->is_dead()) continue;
-        if (troop->get_team() == Team::BASKET && team == Team::FRUIT) continue;
-        if (troop->get_team() == Team::ENEMY_BASKET && team == Team::VEGETABLE) continue;
+        if (troop->get_team() == Team::BASKET && team == Team::BLUE) continue;
+        if (troop->get_team() == Team::ENEMY_BASKET && team == Team::RED) continue;
 
         float distance_to_troop = glm::distance(troop->get_position(), position);
         

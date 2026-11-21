@@ -27,7 +27,7 @@ void World::update(float elapsed)
         else if (dx < -0.002f) troop->set_face_left(true);
 
         Team team = troop->get_team();
-        if (team != Team::FRUIT && team != Team::VEGETABLE) continue;
+        if (team != Team::BLUE && team != Team::RED) continue;
         if (troop->is_attacking()) {
             if (troop->get_pose() != 2) troop->reset_attack_time();
             troop->set_pose(2);

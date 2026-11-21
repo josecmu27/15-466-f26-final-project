@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GL.hpp"
+#include "Troop.hpp"
 
 #include <glm/glm.hpp>
 
@@ -22,6 +23,7 @@ struct AnimClip {
 // Walk and attack clips for the troop created with `troop_name`.
 struct CharacterAnim {
 	std::string troop_name;
+	Team team = Team::BLUE;
 	AnimClip walk;
 	AnimClip attack;
 	// Unflipped frames look toward -x when this is true. Current strips look toward +x.
@@ -42,6 +44,7 @@ struct CharacterAnim {
 // One row registers a character. See the roster in PlayMode::load_troop_sprite.
 struct CharacterAnimDesc {
 	char const *troop_name;
+	Team team;
 	char const *walk_prefix;
 	int walk_frames;
 	char const *attack_prefix;

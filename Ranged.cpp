@@ -132,8 +132,8 @@ void Ranged::determine_target()
     for (auto const &troop : World::get_world()->troops){
         if (!troop || troop.get() == this) continue;
         if (troop->get_team() == team || troop->is_dead()) continue;
-        if (troop->get_team() == Team::BASKET && team == Team::FRUIT) continue;
-        if (troop->get_team() == Team::ENEMY_BASKET && team == Team::VEGETABLE) continue;
+        if (troop->get_team() == Team::BASKET && team == Team::BLUE) continue;
+        if (troop->get_team() == Team::ENEMY_BASKET && team == Team::RED) continue;
 
         float distance_to_troop = glm::distance(troop->get_position(), position);
         

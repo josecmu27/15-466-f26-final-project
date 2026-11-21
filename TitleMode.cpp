@@ -13,7 +13,7 @@
 
 namespace {
 
-const std::string kTitle = "FRUIT VS VEGETABLE";
+const std::string kTitle = "BLUE VS RED";
 
 constexpr float kTau = 6.28318530718f;
 

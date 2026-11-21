@@ -10,8 +10,8 @@
 class Troop;
 
 enum Team {
-    FRUIT, // Player
-    VEGETABLE, // Enemy
+    BLUE, // Player
+    RED, // Enemy
     BASKET, // Player's Base
     ENEMY_BASKET // Enemy's Base
 };
@@ -32,7 +32,7 @@ protected:
     glm::vec2 position = glm::vec2(0.0f);
     TroopDataAsset* data = nullptr;
     int health = 0;
-    Team team = Team::FRUIT;
+    Team team = Team::BLUE;
 
     // Animation
     float walk_time = 0.0f;
@@ -46,7 +46,7 @@ protected:
     
 public:
     Troop(glm::vec2 position_, TroopDataAsset* data_, Team team_) : 
-        position(position_), data(data_), health(data_ ? data->max_health : 0), team(team_), face_left(team_ != Team::FRUIT) {}
+        position(position_), data(data_), health(data_ ? data->max_health : 0), team(team_), face_left(team_ != Team::BLUE) {}
 
     virtual ~Troop() = default;
 

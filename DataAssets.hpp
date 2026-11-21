@@ -62,6 +62,8 @@ struct DataAssets {
 		pineapple.heal_radius = 2.5f;
 
 		orange.name = "OrangeFlyer";
+		orange.label = "Orange";
+		orange.description = "Flying fighter. Crosses the river and obstacles in a straight line.\n120 health, 20 damage in a small area. Ground melee cannot target it. Costs 20.";
 		orange.max_health = 120;
 		orange.resource_cost = 20;
 		orange.attack_damage = 20;
