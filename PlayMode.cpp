@@ -139,6 +139,7 @@ static int anim_frame(float time, int frames) {
 static char const *selected_troop_name(TroopType type) {
 	if (type == TroopType::BANANA_RANGED) return "BananaRanged";
 	if (type == TroopType::PINEAPPLE_HEALER) return "PineappleHealer";
+	if (type == TroopType::ORANGE_FLYER) return "OrangeFlyer";
 	
 	return "CherryBrawler";
 }
@@ -146,6 +147,8 @@ static char const *selected_troop_name(TroopType type) {
 static TroopType troop_type_from_name(std::string const &name) {
 	if (name == "BananaRanged") return TroopType::BANANA_RANGED;
 	if (name == "PineappleHealer") return TroopType::PINEAPPLE_HEALER;
+	if (name == "OrangeFlyer") return TroopType::ORANGE_FLYER;
+	
 	return TroopType::CHERRY_BRAWLER;
 }
 
@@ -506,6 +509,13 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 		resources_ -= data_assets.pineapple.resource_cost;
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
 		World::get_world()->troops.push_back(std::make_shared<Healer>(pos, &data_assets.pineapple, Team::FRUIT));
+	}
+	else if (selected_troop == TroopType::ORANGE_FLYER){
+		if (resources_ < data_assets.orange.resource_cost) return;
+
+		resources_ -= data_assets.orange.resource_cost;
+		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
+		World::get_world()->troops.push_back(std::make_shared<Flyer>(pos, &data_assets.orange, Team::FRUIT));
 	}
 
 	
@@ -905,6 +915,7 @@ void PlayMode::load_troop_sprite() {
 		{"CherryBrawler", "BlueTeam/Cherry/Walk/CherryBrawler_Walk-", 11, "BlueTeam/Cherry/Attack/CherryBrawler_Attack-", 11, false, true, false},
 		{"BananaRanged", "BlueTeam/Banana/Walk/BananaRanged_Walk-", 11, "BlueTeam/Banana/Attack/BananaRanged_Attack-", 16, false, true, true},
 		{"PineappleHealer", "BlueTeam/Pineapple/Walk/PineappleHealer_Walk-", 1, "BlueTeam/Pineapple/Attack/PineappleHealer_Attack-", 1, false, true, true},
+		{"OrangeFlyer", "BlueTeam/Orange/Walk/OrangeFlyer_Walk-", 1, "BlueTeam/Orange/Attack/OrangeFlyer_Attack-", 1, false, true, true},
 		{"RadishBrawler", "RedTeam/Cherry/Walk/CherryBrawler_Walk-", 11, "RedTeam/Cherry/Attack/CherryBrawler_Attack-", 11, false, false, false} // should change this to take into account red and blue team
 	};
 	for (auto const &desc : roster) load_character(desc);
