@@ -167,6 +167,8 @@ const game_names = [
 	maek.CPP('Ranged.cpp'),
 	maek.CPP('Healer.cpp'),
 	maek.CPP('Flyer.cpp'),
+	maek.CPP('Collector.cpp'),
+	maek.CPP('SpawnDirector.cpp'),
 	maek.CPP('Pathfinder.cpp'),
 	maek.CPP('Map.cpp'),
 	maek.CPP('World.cpp'),

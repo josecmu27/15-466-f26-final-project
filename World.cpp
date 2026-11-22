@@ -7,6 +7,11 @@ void World::clear()
 {
     troops.clear();
     projectiles.clear();
+    water_drops.clear();
+    player_resources = 0;
+    director_resources = 0;
+    match_time_remaining = match_time_duration;
+    regeneration_timer = 1.0f;
 }
 
 void World::update(float elapsed)
@@ -45,9 +50,23 @@ void World::update(float elapsed)
     }
 
     handle_collisions();
+
+    if (match_time_remaining > 0.0f) {
+        match_time_remaining = std::max(0.0f, match_time_remaining - elapsed);
+    }
+
+    // water drop resource regeneration
+    if (regeneration_timer <= 0.0f){
+        add_player_resources(base_regeneration_amount);
+        add_director_resources(base_regeneration_amount);
+        regeneration_timer = regeneration_interval;
+    } else {
+        regeneration_timer -= elapsed;
+    }
     
     cleanup_defeated_troops();
     cleanup_inactive_projectiles();
+    cleanup_collected_resources();
 }
 
 // optimize later
@@ -82,10 +101,12 @@ void World::handle_collisions()
 void World::cleanup_defeated_troops()
 {
     for (auto it = troops.begin(); it != troops.end();){
-        if ((*it)->is_dead())
+            if ((*it)->is_dead())
         {
             Team team = (*it)->get_team();
             if (team == Team::BASKET || team == Team::ENEMY_BASKET) GameAudio::play_at(GameAudio::Sfx::BasketBreak, (*it)->get_position());
+            auto water_drop = std::make_shared<WaterDrop>((*it)->get_position(), 5, false, false);
+            water_drops.push_back(water_drop);
             it = troops.erase(it);
         } 
         else 
@@ -107,4 +128,23 @@ void World::cleanup_inactive_projectiles()
             ++it;
         }
     }
+}
+
+void World::cleanup_collected_resources()
+{
+    for (auto it = water_drops.begin(); it != water_drops.end();){
+        if ((*it)->collected)
+        {
+            it = water_drops.erase(it);
+        } 
+        else 
+        {
+            ++it;
+        }
+    }
+}
+
+void World::add_resources(Team team, int amount) {
+    if (team == Team::BLUE) add_player_resources(amount);
+    if (team == Team::RED) add_director_resources(amount);
 }
