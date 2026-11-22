@@ -1,4 +1,5 @@
 #include "World.hpp"
+#include "GameAudio.hpp"
 
 World* World::instance = nullptr;
 
@@ -83,6 +84,8 @@ void World::cleanup_defeated_troops()
     for (auto it = troops.begin(); it != troops.end();){
         if ((*it)->is_dead())
         {
+            Team team = (*it)->get_team();
+            if (team == Team::BASKET || team == Team::ENEMY_BASKET) GameAudio::play_at(GameAudio::Sfx::BasketBreak, (*it)->get_position());
             it = troops.erase(it);
         } 
         else 

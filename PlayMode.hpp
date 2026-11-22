@@ -102,7 +102,7 @@ struct PlayMode : Mode {
 	void spawn_practice_enemy();
 	void draw_practice_hints(glm::mat4 const &clip);
 	void draw_practice_banner();
-	bool practice_button(glm::vec2 mouse, bool &start_game) const;
+	bool practice_button(glm::vec2 cursor, bool &start_game) const;
 	void draw_troop_description();
 	TroopDataAsset const *asset_for(std::string const &name) const;
 

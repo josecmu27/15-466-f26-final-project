@@ -2,6 +2,7 @@
 
 #include "PlayMode.hpp"
 #include "ColorProgram.hpp"
+#include "GameAudio.hpp"
 #include "GameFonts.hpp"
 #include "TextRenderer.hpp"
 #include "gl_errors.hpp"
@@ -178,6 +179,8 @@ TitleMode::TitleMode() {
 	SDL_GetWindowSizeInPixels(Mode::window, &w, &h);
 	if (w > 0 && h > 0) drawable_size_ = glm::uvec2((unsigned)w, (unsigned)h);
 
+	GameAudio::play_music(GameAudio::Music::Title);
+
 	float mx = 0.0f, my = 0.0f;
 	SDL_GetMouseState(&mx, &my);
 	mouse_ = glm::vec2(mx, my);
@@ -244,15 +247,22 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 		mouse_ = glm::vec2(evt.button.x, evt.button.y);
 		Button released = button_at(mouse_ui());
 		if (released != Button::None && released == pressing_) {
-			if (released == Button::Start) start_requested_ = true;
-			else if (released == Button::How) how_requested_ = true;
-			else quit();
+			if (released == Button::Start) {
+				GameAudio::play(GameAudio::Sfx::UiConfirm);
+				start_requested_ = true;
+			} else if (released == Button::How) {
+				GameAudio::play(GameAudio::Sfx::UiConfirm);
+				how_requested_ = true;
+			} else {
+				quit();
+			}
 		}
 		pressing_ = Button::None;
 		return true;
 	}
 	if (evt.type == SDL_EVENT_KEY_DOWN) {
 		if (evt.key.key == SDLK_RETURN || evt.key.key == SDLK_KP_ENTER || evt.key.key == SDLK_SPACE) {
+			GameAudio::play(GameAudio::Sfx::UiConfirm);
 			start_requested_ = true;
 			return true;
 		}
@@ -266,7 +276,9 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 
 void TitleMode::update(float elapsed) {
 	time_ += elapsed;
+	Button was_hovering = hover_;
 	hover_ = button_at(mouse_ui());
+	if (hover_ != was_hovering && hover_ != Button::None) GameAudio::play(GameAudio::Sfx::UiHover);
 
 	if (how_requested_) {
 		auto keep_alive = shared_from_this();

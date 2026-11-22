@@ -4,6 +4,7 @@
 
 #include "ColorProgram.hpp"
 #include "ColorTextureProgram.hpp"
+#include "GameAudio.hpp"
 #include "GameFonts.hpp"
 #include "TextRenderer.hpp"
 #include "data_path.hpp"
@@ -70,6 +71,8 @@ PlayMode::PlayMode(bool practice) : practice_(practice) {
 	int w = 0, h = 0;
 	SDL_GetWindowSize(Mode::window, &w, &h);
 	if (w > 0 && h > 0) window_size = glm::uvec2((unsigned)w, (unsigned)h);
+
+	GameAudio::play_music(GameAudio::Music::Battle);
 
 	float mx = 0.0f, my = 0.0f;
 	SDL_GetMouseState(&mx, &my);
@@ -205,20 +208,26 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 			}
 		}
 		if (dragging_) {
+			// place_troop only spends resources when it actually places, so that tells us which sound to play.
+			int resources_before = resources_;
 			glm::vec3 hit;
 			if (mouse_to_world(hit)) place_troop(glm::vec2(hit));
+			GameAudio::play(resources_ < resources_before ? GameAudio::Sfx::Place : GameAudio::Sfx::PlaceFail);
 		}
 		if (box_dragging_) {
 			glm::vec2 mn = (glm::min(glm::vec2(box_start_), glm::vec2(box_end_)));
 			glm::vec2 mx = (glm::max(glm::vec2(box_start_), glm::vec2(box_end_)));
 
+			bool any_selected = false;
 			for (auto const &troop : World::get_world()->troops) {
 				troop->set_selected(false);
 				if (troop->get_team() != Team::BLUE) continue;
 				glm::vec2 pos = troop->get_position();
 				bool selected = troop_overlaps(pos, mn, mx);
 				troop->set_selected(selected);
+				if (selected) any_selected = true;
 			}
+			if (any_selected) GameAudio::play(GameAudio::Sfx::SelectUnits);
 		}
 		dragging_ = false;
 		box_dragging_ = false;
@@ -267,11 +276,14 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 					troop->give_order(order);
 				}
 			}
+			GameAudio::play(GameAudio::Sfx::Order);
 		}
 		return true;
 	}
 	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_SPACE) {
 		paused_ = !paused_;
+		GameAudio::play(paused_ ? GameAudio::Sfx::Pause : GameAudio::Sfx::Resume);
+		GameAudio::set_music_level(paused_ ? 0.35f : 1.0f);
 		return true;
 	}
 	return false;
@@ -306,12 +318,14 @@ void PlayMode::update(float elapsed) {
 
 	if (enemy_basket_.expired()) {
 		won_ = true;
+		GameAudio::play_jingle(GameAudio::Jingle::Victory);
 		dragging_ = false;
 		box_dragging_ = false;
 		return;
 	}
 	if (basket_.expired()) {
 		lost_ = true;
+		GameAudio::play_jingle(GameAudio::Jingle::Defeat);
 		dragging_ = false;
 		box_dragging_ = false;
 		return;
@@ -598,7 +612,7 @@ void PlayMode::advance_practice() {
 	}
 }
 
-bool PlayMode::practice_button(glm::vec2 mouse, bool &start_game) const {
+bool PlayMode::practice_button(glm::vec2 cursor, bool &start_game) const {
 	if (!practice_ || lesson_ < 4 || window_size.x == 0 || window_size.y == 0) return false;
 	struct Choice { glm::vec2 center; bool start; };
 	Choice choices[2] = {
@@ -609,7 +623,7 @@ bool PlayMode::practice_button(glm::vec2 mouse, bool &start_game) const {
 	for (Choice choice : choices) {
 		glm::vec2 at = window_from_clip(choice.center, window_size);
 		glm::vec2 span(half.x * float(window_size.x), half.y * float(window_size.y));
-		if (std::abs(mouse.x - at.x) <= span.x && std::abs(mouse.y - at.y) <= span.y) {
+		if (std::abs(cursor.x - at.x) <= span.x && std::abs(cursor.y - at.y) <= span.y) {
 			start_game = choice.start;
 			return true;
 		}
@@ -1627,7 +1641,7 @@ void PlayMode::draw_bar() {
 	glDisable(GL_BLEND);
 
 	if (practice_ && lesson_ == 0) {
-		int slot_index = 0;
+		slot_index = 0;
 		for (auto const &anim : characters_) {
 			if (!anim.show_in_bar) continue;
 			if (slot_index == 0) {

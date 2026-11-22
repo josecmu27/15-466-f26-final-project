@@ -26,7 +26,7 @@ public:
     void set_inactive() { active = false; }
 
     float get_radius() { return radius; }
-    float get_damage() { return damage; }
+    int get_damage() { return damage; }
 
     Team get_team() { return team; }
 };

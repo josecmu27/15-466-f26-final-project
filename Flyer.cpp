@@ -89,7 +89,7 @@ void Flyer::attack()
         if (!troop || troop->is_dead()) continue;
         
         // check if friendly troop
-        if (troop->get_team() == team || (team == Team::BLUE & troop->get_team() == Team::BASKET) || 
+        if (troop->get_team() == team || (team == Team::BLUE && troop->get_team() == Team::BASKET) || 
             (team == Team::RED && troop->get_team() == Team::ENEMY_BASKET)) continue;
 
         if (glm::distance(position, troop->get_position()) <= flyer_data->splash_radius){
