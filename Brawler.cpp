@@ -2,6 +2,8 @@
 #include "GameAudio.hpp"
 #include "World.hpp"
 
+#include <cmath>
+
 namespace {
 
 bool is_basket(Team team) {
@@ -45,14 +47,13 @@ void Brawler::update(float elapsed)
 {
     if (team == Team::BASKET || team == Team::ENEMY_BASKET) return;
 
-    attack_timer -= elapsed;
-
     auto ordered = order.attack_target.lock();
     if (order.type == OrderType::Attack && (!ordered || ordered->is_dead())) cancel_order();
     if (order.type == OrderType::Move && glm::distance(position, order.move_target) < order.arrive_radius) cancel_order();
 
     if (order.type == OrderType::Move) {
         target_troop.reset();
+        hit_cycle = -1;
         walk_toward(elapsed, order.move_target);
         return;
     }
@@ -66,11 +67,22 @@ void Brawler::update(float elapsed)
         float aim = target->get_position().x - position.x;
         if (aim > 0.01f) set_face_left(false);
         else if (aim < -0.01f) set_face_left(true);
-        if (attack_timer < 0.0f){
+
+        // One swing lasts attack_rate. Frame 7 (index 6) is the fist fully extended.
+        constexpr int attack_frames = 11;
+        constexpr int release_frame = 6;
+        float rate = data->attack_rate > 1e-4f ? data->attack_rate : float(attack_frames) / 12.0f;
+        float shown = (get_pose() == 2) ? get_attack_time() + elapsed : elapsed;
+        int tick = (int)std::floor(shown / rate * float(attack_frames));
+        if (tick < 0) tick = 0;
+        int cycle = tick / attack_frames;
+        int frame = tick % attack_frames;
+        if (frame >= release_frame && hit_cycle != cycle){
             attack();
-            attack_timer = data->attack_rate;
+            hit_cycle = cycle;
         }
     } else{
+        hit_cycle = -1;
         move_to_target(elapsed);
     }
   

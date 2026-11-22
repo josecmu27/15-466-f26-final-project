@@ -1060,16 +1060,16 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 	};
 	std::vector< SpriteQuad > quads;
 	quads.reserve(layered.size() + World::get_world()->projectiles.size());
-	auto push_quad = [&](float y, GLuint tex, glm::vec2 bl, glm::vec2 tr, float u0, float u1, float v0, float v1) {
+	auto push_quad = [&](float y, GLuint tex, glm::vec2 bl, glm::vec2 tr, float u0, float u1, float v0, float v1, glm::u8vec4 color) {
 		SpriteQuad quad;
 		quad.y = y;
 		quad.tex = tex;
-		quad.verts[0] = {glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, v0)};
-		quad.verts[1] = {glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(u1, v0)};
-		quad.verts[2] = {glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, v1)};
-		quad.verts[3] = {glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, v0)};
-		quad.verts[4] = {glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, v1)};
-		quad.verts[5] = {glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(u0, v1)};
+		quad.verts[0] = {glm::vec3(bl.x, bl.y, 0.0f), color, glm::vec2(u0, v0)};
+		quad.verts[1] = {glm::vec3(tr.x, bl.y, 0.0f), color, glm::vec2(u1, v0)};
+		quad.verts[2] = {glm::vec3(tr.x, tr.y, 0.0f), color, glm::vec2(u1, v1)};
+		quad.verts[3] = {glm::vec3(bl.x, bl.y, 0.0f), color, glm::vec2(u0, v0)};
+		quad.verts[4] = {glm::vec3(tr.x, tr.y, 0.0f), color, glm::vec2(u1, v1)};
+		quad.verts[5] = {glm::vec3(bl.x, tr.y, 0.0f), color, glm::vec2(u0, v1)};
 		quads.push_back(quad);
 	};
 	for (auto const &layer : layered) {
@@ -1080,7 +1080,8 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 		AnimClip const &clip = anim->clip_for(attacking);
 		if (!clip.ready()) continue;
 		float anim_time = attacking ? troop->get_attack_time() : troop->get_walk_time();
-		if (attacking && troop->get_name() == "BananaRanged" && troop->get_attack_rate() > 1e-4f)
+		if (attacking && troop->get_attack_rate() > 1e-4f
+			&& (troop->get_name() == "BananaRanged" || troop->get_name() == "CherryBrawler"))
 			anim_time *= float(clip.count()) / (troop->get_attack_rate() * 12.0f);
 		int frame = anim_frame(anim_time, clip.count());
 		if (clip.frames[(size_t)frame] == 0) continue;
@@ -1089,7 +1090,7 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 		float u0 = clip.uv_min.x;
 		float u1 = clip.uv_max.x;
 		if (anim->mirrored(face_left)) std::swap(u0, u1);
-		push_quad(layer.y, clip.frames[(size_t)frame], c - clip.half, c + clip.half, u0, u1, clip.uv_min.y, clip.uv_max.y);
+		push_quad(layer.y, clip.frames[(size_t)frame], c - clip.half, c + clip.half, u0, u1, clip.uv_min.y, clip.uv_max.y, white);
 	}
 	if (projectile_tex_ != 0) {
 		for (auto const &projectile : World::get_world()->projectiles) {
@@ -1098,7 +1099,7 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 			float u0 = projectile_uv_min_.x;
 			float u1 = projectile_uv_max_.x;
 			if (projectile->get_velocity().x < 0.0f) std::swap(u0, u1);
-			push_quad(projectile->get_position().y, projectile_tex_, c - projectile_half_, c + projectile_half_, u0, u1, projectile_uv_min_.y, projectile_uv_max_.y);
+			push_quad(projectile->get_position().y, projectile_tex_, c - projectile_half_, c + projectile_half_, u0, u1, projectile_uv_min_.y, projectile_uv_max_.y, white);
 		}
 	}
 	std::stable_sort(quads.begin(), quads.end(), [](SpriteQuad const &a, SpriteQuad const &b) {
