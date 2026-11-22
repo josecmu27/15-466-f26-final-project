@@ -38,9 +38,23 @@ void World::update(float elapsed)
     }
 
     handle_collisions();
+
+    if (match_time_remaining > 0.0f) {
+        match_time_remaining = std::max(0.0f, match_time_remaining - elapsed);
+    }
+
+    // water drop resource regeneration
+    if (regeneration_timer <= 0.0f){
+        add_player_resources(base_regeneration_amount);
+        add_director_resources(base_regeneration_amount);
+        regeneration_timer = regeneration_interval;
+    } else {
+        regeneration_timer -= elapsed;
+    }
     
     cleanup_defeated_troops();
     cleanup_inactive_projectiles();
+    cleanup_collected_resources();
 }
 
 // optimize later
@@ -77,6 +91,8 @@ void World::cleanup_defeated_troops()
     for (auto it = troops.begin(); it != troops.end();){
         if ((*it)->is_dead())
         {
+            auto water_drop = std::make_shared<WaterDrop>((*it)->get_position(), 5, false, false);
+            water_drops.push_back(water_drop);
             it = troops.erase(it);
         } 
         else 
@@ -98,4 +114,23 @@ void World::cleanup_inactive_projectiles()
             ++it;
         }
     }
+}
+
+void World::cleanup_collected_resources()
+{
+    for (auto it = water_drops.begin(); it != water_drops.end();){
+        if ((*it)->collected)
+        {
+            it = water_drops.erase(it);
+        } 
+        else 
+        {
+            ++it;
+        }
+    }
+}
+
+void World::add_resources(Team team, int amount) {
+    if (team == Team::FRUIT) add_player_resources(amount);
+    if (team == Team::VEGETABLE) add_director_resources(amount);
 }

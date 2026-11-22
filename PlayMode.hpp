@@ -8,22 +8,16 @@
 #include "CharacterAnim.hpp"
 
 #include <glm/glm.hpp>
+#include "SpawnDirector.hpp"
 #include "Brawler.hpp"
 #include "Ranged.hpp"
 #include "Healer.hpp"
 #include "Flyer.hpp"
+#include "Collector.hpp"
 #include "DataAssets.hpp"
 
 #include <string>
 #include <vector>
-
-/* troop selection (note that the baskets are not included)*/
-enum TroopType {
-	CHERRY_BRAWLER, 
-	BANANA_RANGED,
-	PINEAPPLE_HEALER,
-	ORANGE_FLYER
-};
 
 struct PlayMode : Mode {
 	PlayMode();
@@ -81,10 +75,17 @@ struct PlayMode : Mode {
 	glm::vec2 projectile_uv_max_ = glm::vec2(1.0f);
 	glm::vec2 projectile_half_ = glm::vec2(0.2f);
 
+	// temp drawing water drop resource
+	GLuint water_tex_ = 0;
+	glm::vec2 water_uv_min_ = glm::vec2(0.0f);
+	glm::vec2 water_uv_max_ = glm::vec2(1.0f);
+	glm::vec2 water_half_ = glm::vec2(0.2f);
+
+
 	static constexpr float bar_frac_ = 0.16f;
 	static constexpr int cherry_cost_ = 2;
 	static constexpr int banana_cost_ = 3;
-	int resources_ = 1000;
+
 	bool dragging_ = false;
 	bool box_dragging_ = false;
 	glm::vec3 box_start_ = glm::vec3(0.0f);
@@ -100,5 +101,10 @@ struct PlayMode : Mode {
 
 	TroopType selected_troop = TroopType::CHERRY_BRAWLER;
 
-	DataAssets data_assets;
+	DataAssets base_data;
+	DataAssets player_data;
+	DataAssets director_data;
+	
+
+	std::unique_ptr<SpawnDirector> spawn_director;
 };

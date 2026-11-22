@@ -16,6 +16,15 @@ enum Team {
     ENEMY_BASKET // Enemy's Base
 };
 
+/* troop selection (note that the baskets are not included)*/
+enum TroopType {
+	CHERRY_BRAWLER, 
+	BANANA_RANGED,
+	PINEAPPLE_HEALER,
+	ORANGE_FLYER,
+	BLUEBERRY_COLLECTOR
+};
+
 enum class OrderType {
     None, Move, Attack
 };
@@ -75,7 +84,7 @@ public:
     bool is_dead() const {return health <= 0; }
     void set_health(int new_health) { health = new_health; }
     void heal(int amount) { health = std::min(health + amount, get_max_health()); }
-    void take_damage(int damage) {
+    virtual void take_damage(int damage) {
         health -= damage;
         if (order.type == OrderType::Move) cancel_order();
     }

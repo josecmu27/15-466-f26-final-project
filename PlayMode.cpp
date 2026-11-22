@@ -76,17 +76,26 @@ PlayMode::PlayMode() {
 	World::get_world()->play_mode = this;
 
 	glm::vec2 basket_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
-	auto basket = std::make_shared<Ranged>(basket_at, &data_assets.basket, Team::BASKET);
+	auto basket = std::make_shared<Ranged>(basket_at, &player_data.basket, Team::BASKET);
 
 	World::get_world()->troops.emplace_back(basket);
 	basket_ = basket;
 
 	glm::vec2 enemy_at = 0.5f * (World::get_world()->map.enemy_base_min() + World::get_world()->map.enemy_base_max());
-	auto enemy_basket = std::make_shared<Ranged>(enemy_at, &data_assets.basket, Team::ENEMY_BASKET);
+	auto enemy_basket = std::make_shared<Ranged>(enemy_at, &player_data.basket, Team::ENEMY_BASKET);
 	World::get_world()->troops.emplace_back(enemy_basket);
 	enemy_basket_ = enemy_basket;
 
 	load_troop_sprite();
+
+	player_data = base_data;
+	director_data = base_data;
+
+	// set initial resources amount
+	World::get_world()->add_player_resources(10);
+	World::get_world()->add_director_resources(10);
+
+	spawn_director = std::make_unique<SpawnDirector>(director_data, 15466);
 }
 
 PlayMode::~PlayMode() {
@@ -102,6 +111,10 @@ PlayMode::~PlayMode() {
 	}
 	if (projectile_tex_ != 0) glDeleteTextures(1, &projectile_tex_);
 	projectile_tex_ = 0;
+
+	if (water_tex_ != 0) glDeleteTextures(1, &water_tex_);
+	water_tex_ = 0;
+
 	if (troop_vao_ != 0) glDeleteVertexArrays(1, &troop_vao_);
 	if (troop_vbo_ != 0) glDeleteBuffers(1, &troop_vbo_);
 	if (bar_vao_ != 0) glDeleteVertexArrays(1, &bar_vao_);
@@ -123,6 +136,7 @@ static char const *selected_troop_name(TroopType type) {
 	if (type == TroopType::BANANA_RANGED) return "BananaRanged";
 	if (type == TroopType::PINEAPPLE_HEALER) return "PineappleHealer";
 	if (type == TroopType::ORANGE_FLYER) return "OrangeFlyer";
+	if (type == TroopType::BLUEBERRY_COLLECTOR) return "BlueberryCollector";
 	
 	return "CherryBrawler";
 }
@@ -131,6 +145,7 @@ static TroopType troop_type_from_name(std::string const &name) {
 	if (name == "BananaRanged") return TroopType::BANANA_RANGED;
 	if (name == "PineappleHealer") return TroopType::PINEAPPLE_HEALER;
 	if (name == "OrangeFlyer") return TroopType::ORANGE_FLYER;
+	if (name == "BlueberryCollector") return TroopType::BLUEBERRY_COLLECTOR;
 	
 	return TroopType::CHERRY_BRAWLER;
 }
@@ -236,6 +251,7 @@ void PlayMode::update(float elapsed) {
 	troop_spawn_timer -= elapsed;
 
 	World::get_world()->update(elapsed);
+	spawn_director->update(elapsed);
 
 	if (enemy_basket_.expired()) {
 		won_ = true;
@@ -419,34 +435,44 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 	if (!World::get_world()->map.world_to_cell(glm::vec3(spawn_pos, 0.0f), col, row)) return;
 	if (!World::get_world()->map.can_place(col, row)) return;
 
-	if (selected_troop == TroopType::CHERRY_BRAWLER){
-		if (resources_ < data_assets.cherry.resource_cost) return;
+	int resources_ = World::get_world()->get_player_resources();
 
-		resources_ -=  data_assets.cherry.resource_cost;
+	if (selected_troop == TroopType::CHERRY_BRAWLER){
+		if (resources_ < player_data.cherry.resource_cost) return;
+
+		World::get_world()->subtract_player_resources(player_data.cherry.resource_cost);
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
 
-		World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &data_assets.cherry, Team::FRUIT));
+		World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &player_data.cherry, Team::FRUIT));
 	} 
 	else if (selected_troop == TroopType::BANANA_RANGED){
-		if (resources_ < data_assets.banana.resource_cost) return;
+		if (resources_ < player_data.banana.resource_cost) return;
 
-		resources_ -= data_assets.banana.resource_cost;
+		World::get_world()->subtract_player_resources(player_data.banana.resource_cost);
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-		World::get_world()->troops.push_back(std::make_shared<Ranged>(pos, &data_assets.banana, Team::FRUIT));
+		World::get_world()->troops.push_back(std::make_shared<Ranged>(pos, &player_data.banana, Team::FRUIT));
 	} 
 	else if (selected_troop == TroopType::PINEAPPLE_HEALER){
-		if (resources_ < data_assets.pineapple.resource_cost) return;
+		if (resources_ < player_data.pineapple.resource_cost) return;
 
-		resources_ -= data_assets.pineapple.resource_cost;
+		World::get_world()->subtract_player_resources(player_data.pineapple.resource_cost);
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-		World::get_world()->troops.push_back(std::make_shared<Healer>(pos, &data_assets.pineapple, Team::FRUIT));
+		World::get_world()->troops.push_back(std::make_shared<Healer>(pos, &player_data.pineapple, Team::FRUIT));
 	}
 	else if (selected_troop == TroopType::ORANGE_FLYER){
-		if (resources_ < data_assets.orange.resource_cost) return;
+		if (resources_ < player_data.orange.resource_cost) return;
 
-		resources_ -= data_assets.orange.resource_cost;
+		World::get_world()->subtract_player_resources(player_data.orange.resource_cost);
 		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-		World::get_world()->troops.push_back(std::make_shared<Flyer>(pos, &data_assets.orange, Team::FRUIT));
+		World::get_world()->troops.push_back(std::make_shared<Flyer>(pos, &player_data.orange, Team::FRUIT));
+	}
+
+	else if (selected_troop == TroopType::BLUEBERRY_COLLECTOR) {
+		if (resources_ < player_data.blueberry.resource_cost) return;
+		
+		World::get_world()->subtract_player_resources(player_data.blueberry.resource_cost);
+		glm::vec2 pos(World::get_world()->map.cell_center(col, row));
+		World::get_world()->troops.push_back(std::make_shared<Collector>(pos, &player_data.blueberry, Team::FRUIT));
 	}
 
 	
@@ -461,7 +487,7 @@ void PlayMode::spawn_vegetable_troop()
 	if (!World::get_world()->map.is_walkable(col, row)) return;
 	
 	glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-	World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &data_assets.cherry, Team::VEGETABLE));
+	World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &player_data.cherry, Team::VEGETABLE));
 }
 
 void PlayMode::load_sprite_png(std::string const &file, GLuint &tex, glm::vec2 &uv_min, glm::vec2 &uv_max, glm::vec2 &half, float height) {
@@ -606,10 +632,13 @@ void PlayMode::load_troop_sprite() {
 		{"BananaRanged", "BlueTeam/Banana/Walk/BananaRanged_Walk-", 11, "BlueTeam/Banana/Attack/BananaRanged_Attack-", 16, false, true, true},
 		{"PineappleHealer", "BlueTeam/Pineapple/Walk/PineappleHealer_Walk-", 1, "BlueTeam/Pineapple/Attack/PineappleHealer_Attack-", 1, false, true, true},
 		{"OrangeFlyer", "BlueTeam/Orange/Walk/OrangeFlyer_Walk-", 1, "BlueTeam/Orange/Attack/OrangeFlyer_Attack-", 1, false, true, true},
+		{"BlueberryCollector", "BlueTeam/Blueberry/Walk/BlueberryCollector_Walk-", 1, "BlueTeam/Blueberry/Attack/BlueberryCollector_Attack-", 1, false, true, true},
 		{"RadishBrawler", "RedTeam/Cherry/Walk/CherryBrawler_Walk-", 11, "RedTeam/Cherry/Attack/CherryBrawler_Attack-", 11, false, false, false} // should change this to take into account red and blue team
+		
 	};
 	for (auto const &desc : roster) load_character(desc);
 	load_sprite_png("Projectiles/banana_projectile.png", projectile_tex_, projectile_uv_min_, projectile_uv_max_, projectile_half_, 0.2f);
+	load_sprite_png("Resources/water_drop.png", water_tex_, water_uv_min_, water_uv_max_, water_half_, 0.2f);
 
 	glGenBuffers(1, &troop_vbo_);
 	glGenVertexArrays(1, &troop_vao_);
@@ -779,6 +808,34 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
 		}
 	}
+
+	if (water_tex_ != 0) {
+		std::vector< SpriteVertex > verts;
+		for (auto const &drop: World::get_world()->water_drops) {
+			if (!drop) continue;
+			glm::vec2 c = drop->position + glm::vec2(0.0f, 0.45f);
+			glm::vec2 bl = c - water_half_;
+			glm::vec2 tr = c + water_half_;
+			float u0 = water_uv_min_.x;
+			float u1 = water_uv_max_.x;
+			
+			SpriteVertex quad[6] = {
+				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, water_uv_min_.y)},
+				{glm::vec3(tr.x, bl.y, 0.0f), white, glm::vec2(u1, water_uv_min_.y)},
+				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, water_uv_max_.y)},
+				{glm::vec3(bl.x, bl.y, 0.0f), white, glm::vec2(u0, water_uv_min_.y)},
+				{glm::vec3(tr.x, tr.y, 0.0f), white, glm::vec2(u1, water_uv_max_.y)},
+				{glm::vec3(bl.x, tr.y, 0.0f), white, glm::vec2(u0, water_uv_max_.y)},
+			};
+			verts.insert(verts.end(), quad, quad + 6);
+		}
+		if (!verts.empty()) {
+			glBindTexture(GL_TEXTURE_2D, water_tex_);
+			glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
+			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts.size());
+		}
+	}
+
 
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -1146,7 +1203,7 @@ void PlayMode::draw_bar() {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glUseProgram(0);
 
-	std::string label = std::to_string(resources_);
+	std::string label = std::to_string(World::get_world()->get_player_resources());
 	float text_h = ndc_h(place.text_h);
 	glm::vec3 anchor(ndc_x(place.text_left), coin_cy - kFontCapCenter * text_h, 0.0f);
 	glm::u8vec4 ink(255, 236, 196, 255);

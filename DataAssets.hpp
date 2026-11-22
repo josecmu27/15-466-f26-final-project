@@ -4,6 +4,7 @@
 #include "RangedDataAsset.hpp"
 #include "HealerDataAsset.hpp"
 #include "FlyerDataAsset.hpp"
+#include "CollectorDataAsset.hpp"
 
 struct DataAssets {
 	BrawlerDataAsset cherry;
@@ -11,11 +12,12 @@ struct DataAssets {
     RangedDataAsset basket;
 	HealerDataAsset pineapple;
 	FlyerDataAsset orange;
+	CollectorDataAsset blueberry;
 
 	DataAssets() {
 		cherry.name = "CherryBrawler";
 		cherry.max_health = 200;
-		cherry.resource_cost = 10;
+		cherry.resource_cost = 3;
 		cherry.attack_damage = 25;
 		cherry.attack_range = 1.0f;
 		cherry.attack_rate = 1.0f;
@@ -24,7 +26,7 @@ struct DataAssets {
 
 		banana.name = "BananaRanged";
 		banana.max_health = 75;
-		banana.resource_cost = 15;
+		banana.resource_cost = 4;
 		banana.attack_damage = 15;
 		banana.attack_range = 7.5f;
 		banana.attack_rate = 1.0f;
@@ -44,7 +46,7 @@ struct DataAssets {
 		
 		pineapple.name = "PineappleHealer";
 		pineapple.max_health = 125;
-		pineapple.resource_cost = 15;
+		pineapple.resource_cost = 3;
 		pineapple.attack_damage = 15;
 		pineapple.attack_range = 1.2f;
 		pineapple.attack_rate = 1.2f;
@@ -55,7 +57,7 @@ struct DataAssets {
 
 		orange.name = "OrangeFlyer";
 		orange.max_health = 120;
-		orange.resource_cost = 20;
+		orange.resource_cost = 5;
 		orange.attack_damage = 20;
 		orange.attack_range = 2.5f;
 		orange.attack_rate = 1.4f;
@@ -64,5 +66,16 @@ struct DataAssets {
 		orange.splash_radius = 2.0f;
 		orange.is_flying = true;
 		orange.can_hit_flying = true;
+
+		blueberry.name = "BlueberryCollector";
+		blueberry.max_health = 65;
+		blueberry.resource_cost = 2;
+		blueberry.attack_damage = 20;
+		blueberry.attack_range = 2.5f;
+		blueberry.attack_rate = 1.4f;
+		blueberry.movement_speed = 1.5f;
+		blueberry.troop_radius = 0.75f;
+		blueberry.splash_radius = 2.0f;
+		blueberry.is_flying = false;
 	}
 };
