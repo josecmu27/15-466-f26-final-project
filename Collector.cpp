@@ -1,4 +1,5 @@
 #include "Collector.hpp"
+#include "GameAudio.hpp"
 #include "World.hpp"
 
 namespace {
@@ -49,7 +50,7 @@ void Collector::update(float elapsed)
 	float best_distance = std::numeric_limits<float>::infinity();
 
 	for (auto &drop : world->water_drops) {
-		if (drop->collected) continue;
+		if (drop->collected || drop->being_carried) continue;
 		float distance = glm::distance(position, drop->position);
 		if (distance < best_distance) {
 			best_distance = distance;
@@ -59,7 +60,9 @@ void Collector::update(float elapsed)
 
 	if (closest_drop) {
 		if (best_distance <= collector_data->pickup_radius) {
-			carried_water_drop = closest_drop; 
+			closest_drop->being_carried = true;
+			carried_water_drop = closest_drop;
+			GameAudio::play_at(GameAudio::Sfx::Pickup, position);
             closest_drop.reset();
 		} else {
 			walk_toward(elapsed, closest_drop->position);

@@ -1,7 +1,9 @@
 #include "Healer.hpp"
+#include "GameAudio.hpp"
 #include "Projectile.hpp"
 #include "World.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -59,12 +61,20 @@ void Healer::update(float elapsed)
         if (tick < 0) tick = 0;
         int cycle = tick / attack_frames;
         int frame = tick % attack_frames;
+        float release_at = rate * (float(release_frame) / float(attack_frames));
+        float sound_at = std::max(0.0f, release_at - 0.2f);
+        float into = shown - float(cycle) * rate;
+        if (into >= sound_at && sound_cycle != cycle){
+            GameAudio::play_at(GameAudio::Sfx::HealerAttack, position);
+            sound_cycle = cycle;
+        }
         if (frame >= release_frame && shot_cycle != cycle){
             attack();
             shot_cycle = cycle;
         }
     } else{
         shot_cycle = -1;
+        sound_cycle = -1;
         move_to_target(elapsed);
     }
 }

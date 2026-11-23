@@ -91,6 +91,7 @@ void World::handle_collisions()
 
             if (dist_squared <= radius_sum_squared){
                 troop->set_health(troop->get_health() - projectile->get_damage());
+                GameAudio::play_at(GameAudio::Sfx::RangedAttack, troop->get_position());
                 projectile->set_inactive();
             }
         }

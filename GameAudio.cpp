@@ -19,24 +19,29 @@ struct SfxSpec {
 	std::vector< std::string > files; // one is picked at random each time, so repeats don't sound robotic
 	float volume;
 	float min_gap; // seconds; drops repeats closer than this so big fights don't turn into noise
-	bool enabled; // only combat sounds are switched on for now
+	bool enabled;
 };
 
 SfxSpec const &spec(GameAudio::Sfx sfx) {
 	using GameAudio::Sfx;
 	static std::array< SfxSpec, size_t(Sfx::Count) > const specs = {{
-		/* UiHover     */ {{"ui_hover.wav"}, 0.35f, 0.03f, false},
-		/* UiConfirm   */ {{"ui_confirm.wav"}, 0.6f, 0.0f, false},
-		/* UiClick     */ {{"ui_click.wav"}, 0.5f, 0.0f, false},
-		/* Place       */ {{"place.wav"}, 0.6f, 0.0f, false},
-		/* PlaceFail   */ {{"place_fail.wav"}, 0.45f, 0.2f, false},
-		/* SelectUnits */ {{"select_units.wav"}, 0.45f, 0.0f, false},
-		/* Order       */ {{"order.wav"}, 0.55f, 0.0f, false},
-		/* Pause       */ {{"pause.wav"}, 0.5f, 0.0f, false},
-		/* Resume      */ {{"resume.wav"}, 0.5f, 0.0f, false},
+		// Gains are set from each file's loudness so they come out at the same level.
+		/* UiHover     */ {{"ui_hover.wav"}, 0.48f, 0.03f, true},
+		/* UiConfirm   */ {{"ui_confirm.wav"}, 0.32f, 0.0f, true},
+		/* UiClick     */ {{"ui_click.wav"}, 0.61f, 0.0f, true},
+		/* Place       */ {{"place.wav"}, 0.49f, 0.0f, true},
+		/* PlaceFail   */ {{"place_fail.wav"}, 0.40f, 0.2f, true},
+		/* SelectUnits */ {{"select_units.wav"}, 0.46f, 0.0f, true},
+		/* Order       */ {{"order.wav"}, 0.73f, 0.0f, true},
+		/* Pause       */ {{"pause.wav"}, 0.56f, 0.0f, true},
+		/* Resume      */ {{"resume.wav"}, 0.55f, 0.0f, true},
 		/* Hit         */ {{"hit_0.wav", "hit_1.wav", "hit_2.wav", "hit_3.wav", "hit_4.wav"}, 0.45f, 0.06f, true},
-		/* BasketHit   */ {{"basket_hit_0.wav", "basket_hit_1.wav", "basket_hit_2.wav"}, 0.5f, 0.12f, true},
-		/* BasketBreak */ {{"basket_break.wav"}, 0.9f, 0.0f, true},
+		/* BasketHit   */ {{"basket_hit_0.wav", "basket_hit_1.wav", "basket_hit_2.wav"}, 0.55f, 0.12f, true},
+		/* BasketBreak */ {{"basket_break.wav"}, 0.51f, 0.0f, true},
+		/* BrawlerAttack */ {{"brawler_attack.wav"}, 0.80f, 0.05f, true},
+		/* RangedAttack  */ {{"ranged_attack.wav"}, 0.70f, 0.05f, true},
+		/* HealerAttack  */ {{"healer_attack.wav"}, 2.09f, 0.05f, true},
+		/* Pickup       */ {{"pickup.wav"}, 0.94f, 0.0f, true},
 	}};
 	return specs[size_t(sfx)];
 }
@@ -76,9 +81,8 @@ Sound::Sample const *music_sample = nullptr;
 float music_volume = 0.0f;
 float music_level = 1.0f;
 
-// Background music and the victory/defeat jingles are switched off for now; flip these to bring them back.
-constexpr bool MusicEnabled = false;
-constexpr bool JinglesEnabled = false;
+constexpr bool MusicEnabled = true;
+constexpr bool JinglesEnabled = true;
 
 constexpr float TitleMusicVolume = 0.35f;
 constexpr float BattleMusicVolume = 0.3f;

@@ -55,6 +55,7 @@ struct PlayMode : Mode {
 	void draw_bar();
 	void draw_pause_overlay();
 	void draw_unit_stats();
+	void draw_match_clock();
 	void draw_victory_overlay();
 	void draw_defeat_overlay();
 	void draw_end_overlay(std::string const &label, glm::u8vec4 color);

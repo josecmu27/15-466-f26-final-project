@@ -102,7 +102,7 @@ void Brawler::attack()
     if (!target || !data) return;
 
     target->take_damage(data->attack_damage);
-    GameAudio::play_at(is_basket(target->get_team()) ? GameAudio::Sfx::BasketHit : GameAudio::Sfx::Hit, target->get_position());
+    GameAudio::play_at(is_basket(target->get_team()) ? GameAudio::Sfx::BasketHit : GameAudio::Sfx::BrawlerAttack, position);
 
     if (target->is_dead())
     {

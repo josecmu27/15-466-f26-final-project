@@ -11,6 +11,8 @@ enum class Sfx {
 	Place, PlaceFail, SelectUnits, Order,
 	Pause, Resume,
 	Hit, BasketHit, BasketBreak,
+	BrawlerAttack, RangedAttack, HealerAttack,
+	Pickup,
 	Count
 };
 

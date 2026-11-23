@@ -2,50 +2,40 @@
 
 #include "PlayMode.hpp"
 #include "ColorProgram.hpp"
+#include "ColorTextureProgram.hpp"
 #include "GameAudio.hpp"
 #include "GameFonts.hpp"
 #include "TextRenderer.hpp"
+#include "data_path.hpp"
 #include "gl_errors.hpp"
+#include "load_save_png.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 
 namespace {
 
-const std::string kTitle = "BLUE VS RED";
-
 constexpr float kTau = 6.28318530718f;
 
 const glm::u8vec4 kInk(27, 16, 18, 255);
-const glm::u8vec4 kPaper(236, 222, 186, 255);
 const glm::u8vec4 kPaperShade(214, 194, 150, 255);
 const glm::u8vec4 kPaperLight(228, 212, 172, 255);
-const glm::u8vec4 kGrass(104, 128, 58, 255);
-const glm::u8vec4 kGrassDark(58, 78, 36, 255);
 const glm::u8vec4 kCherry(196, 58, 52, 255);
 const glm::u8vec4 kCherryLight(222, 92, 70, 255);
+const glm::u8vec4 kCream(255, 236, 206, 255);
 
-// Buttons, in ui space (all the same size):
-const glm::vec2 kStartCenter(0.0f, 0.10f);
-const glm::vec2 kHowCenter(0.0f, -0.14f);
-const glm::vec2 kQuitCenter(0.0f, -0.38f);
-const glm::vec2 kButtonHalf(0.46f, 0.09f);
+// Buttons sit low, under the two lineups (all the same size):
+const glm::vec2 kStartCenter(0.0f, -0.52f);
+const glm::vec2 kHowCenter(0.0f, -0.70f);
+const glm::vec2 kQuitCenter(0.0f, -0.88f);
+const glm::vec2 kButtonHalf(0.40f, 0.072f);
 
 bool inside_button(glm::vec2 ui, glm::vec2 center) {
 	glm::vec2 d = glm::abs(ui - center);
 	return d.x <= kButtonHalf.x && d.y <= kButtonHalf.y;
-}
-
-float hash01(int a, int b, int c) {
-	uint32_t n = (uint32_t)a * 1664525u ^ (uint32_t)b * 1013904223u ^ (uint32_t)c * 2246822519u;
-	n ^= n >> 16;
-	n *= 0x7feb352du;
-	n ^= n >> 15;
-	n *= 0x846ca68bu;
-	n ^= n >> 16;
-	return float(n & 0xFFFFFFu) / float(0xFFFFFFu);
 }
 
 using Mesh = std::vector< TitleMode::Vertex >;
@@ -110,42 +100,46 @@ std::vector< glm::vec2 > round_rect(glm::vec2 mn, glm::vec2 mx, float rad, int s
 	return pts;
 }
 
-// Old-film overlay in clip space, matching Map::draw_film in PlayMode:
-// a dark vignette, flickering grain, and an occasional vertical scratch.
-void paint_film(Mesh &fx, float time) {
-	int frame = (int)std::floor(time * 8.0f);
-	glm::u8vec4 clear(0, 0, 0, 0);
-	glm::u8vec4 dark(12, 6, 4, 150);
-	int segs = 28;
-	for (int i = 0; i < segs; ++i) {
-		float a0 = float(i) / float(segs) * kTau;
-		float a1 = float(i + 1) / float(segs) * kTau;
-		glm::vec2 i0 = 0.62f * glm::vec2(std::cos(a0), std::sin(a0));
-		glm::vec2 i1 = 0.62f * glm::vec2(std::cos(a1), std::sin(a1));
-		glm::vec2 o0 = 1.55f * glm::vec2(std::cos(a0), std::sin(a0));
-		glm::vec2 o1 = 1.55f * glm::vec2(std::cos(a1), std::sin(a1));
-		fx.push_back(TitleMode::Vertex{glm::vec3(i0, 0.0f), clear});
-		fx.push_back(TitleMode::Vertex{glm::vec3(o0, 0.0f), dark});
-		fx.push_back(TitleMode::Vertex{glm::vec3(o1, 0.0f), dark});
-		fx.push_back(TitleMode::Vertex{glm::vec3(i0, 0.0f), clear});
-		fx.push_back(TitleMode::Vertex{glm::vec3(o1, 0.0f), dark});
-		fx.push_back(TitleMode::Vertex{glm::vec3(i1, 0.0f), clear});
+} // namespace
+
+TitleMode::Portrait TitleMode::load_portrait(std::string const &file) {
+	glm::uvec2 size(0);
+	std::vector< glm::u8vec4 > pixels;
+	load_png(data_path(file), &size, &pixels, LowerLeftOrigin);
+	if (size.x == 0 || size.y == 0 || pixels.empty()) {
+		throw std::runtime_error("TitleMode: " + file + " is empty");
 	}
-	for (int i = 0; i < 140; ++i) {
-		glm::vec2 p(hash01(i, frame / 2, 1) * 2.0f - 1.0f, hash01(i, frame / 2, 2) * 2.0f - 1.0f);
-		float s = 0.0025f + hash01(i, 3, 3) * 0.0035f;
-		bool light = hash01(i, 4, 4) > 0.55f;
-		glm::u8vec4 c = light ? glm::u8vec4(255, 244, 220, 50) : glm::u8vec4(20, 10, 8, 60);
-		tri(fx, p, p + glm::vec2(s, 0.0f), p + glm::vec2(0.0f, s), c);
+	int min_x = (int)size.x, min_y = (int)size.y, max_x = -1, max_y = -1;
+	for (int y = 0; y < (int)size.y; ++y) {
+		for (int x = 0; x < (int)size.x; ++x) {
+			if (pixels[(size_t)y * size.x + (size_t)x].a <= 20) continue;
+			min_x = std::min(min_x, x);
+			min_y = std::min(min_y, y);
+			max_x = std::max(max_x, x);
+			max_y = std::max(max_y, y);
+		}
 	}
-	if (hash01(frame, 8, 8) > 0.35f) {
-		float x = hash01(frame, 9, 1) * 1.6f - 0.8f;
-		glm::u8vec4 scratch(255, 250, 240, 35);
-		glm::vec2 a(x, -1.0f), b(x + 0.003f, -1.0f), c(x + 0.001f, 1.0f), d(x + 0.004f, 1.0f);
-		tri(fx, a, b, c, scratch);
-		tri(fx, b, d, c, scratch);
+	if (max_x < min_x || max_y < min_y) {
+		throw std::runtime_error("TitleMode: " + file + " has no visible pixels");
 	}
+	TitleMode::Portrait portrait;
+	portrait.uv_min = glm::vec2(float(min_x) / float(size.x), float(min_y) / float(size.y));
+	portrait.uv_max = glm::vec2(float(max_x + 1) / float(size.x), float(max_y + 1) / float(size.y));
+	portrait.aspect = float(max_x - min_x + 1) / float(max_y - min_y + 1);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glGenTextures(1, &portrait.tex);
+	glBindTexture(GL_TEXTURE_2D, portrait.tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, (GLsizei)size.x, (GLsizei)size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	// These are drawn much larger than the source, so keep the full image and sample it directly.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return portrait;
 }
+
+namespace {
 
 // Width of `text` in units of its height.
 float text_width(Font const &font, std::string const &text) {
@@ -196,10 +190,30 @@ TitleMode::TitleMode() {
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
+
+	portraits_.push_back(load_portrait("title.png"));
+
+	glGenBuffers(1, &sprite_vbo_);
+	glGenVertexArrays(1, &sprite_vao_);
+	glBindVertexArray(sprite_vao_);
+	glBindBuffer(GL_ARRAY_BUFFER, sprite_vbo_);
+	glVertexAttribPointer(color_texture_program->Position_vec4, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3) + sizeof(glm::u8vec4) + sizeof(glm::vec2), (void *)0);
+	glEnableVertexAttribArray(color_texture_program->Position_vec4);
+	glVertexAttribPointer(color_texture_program->Color_vec4, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(glm::vec3) + sizeof(glm::u8vec4) + sizeof(glm::vec2), (void *)sizeof(glm::vec3));
+	glEnableVertexAttribArray(color_texture_program->Color_vec4);
+	glVertexAttribPointer(color_texture_program->TexCoord_vec2, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec3) + sizeof(glm::u8vec4) + sizeof(glm::vec2), (void *)(sizeof(glm::vec3) + sizeof(glm::u8vec4)));
+	glEnableVertexAttribArray(color_texture_program->TexCoord_vec2);
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	GL_ERRORS();
 }
 
 TitleMode::~TitleMode() {
+	for (Portrait &portrait : portraits_) {
+		if (portrait.tex != 0) glDeleteTextures(1, &portrait.tex);
+	}
+	if (sprite_vao_ != 0) glDeleteVertexArrays(1, &sprite_vao_);
+	if (sprite_vbo_ != 0) glDeleteBuffers(1, &sprite_vbo_);
 	if (shapes_vao_ != 0) glDeleteVertexArrays(1, &shapes_vao_);
 	if (shapes_vbo_ != 0) glDeleteBuffers(1, &shapes_vbo_);
 }
@@ -254,6 +268,7 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 				GameAudio::play(GameAudio::Sfx::UiConfirm);
 				how_requested_ = true;
 			} else {
+				GameAudio::play(GameAudio::Sfx::UiClick);
 				quit();
 			}
 		}
@@ -302,48 +317,62 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		0.0f, 0.0f, 0.0f, 1.0f
 	);
 
-	glClearColor(0.20f, 0.11f, 0.08f, 1.0f);
+	glClearColor(0.07f, 0.10f, 0.22f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	// Paper card that fills most of the window, with a meadow along its bottom.
-	float card_hw = std::min(asp - 0.08f, 1.7f);
-	glm::vec2 card_min(-card_hw, -0.92f);
-	glm::vec2 card_max(card_hw, 0.92f);
-	float meadow_top = -0.52f;
+	auto draw_color_mesh = [&](Mesh const &mesh, glm::mat4 const &clip) {
+		if (mesh.empty()) return;
+		glBindBuffer(GL_ARRAY_BUFFER, shapes_vbo_);
+		glBufferData(GL_ARRAY_BUFFER, mesh.size() * sizeof(Vertex), mesh.data(), GL_STREAM_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glUseProgram(color_program->program);
+		glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(clip));
+		glBindVertexArray(shapes_vao_);
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)mesh.size());
+		glBindVertexArray(0);
+		glUseProgram(0);
+	};
 
-	Mesh shapes;
-	{
-		auto card = round_rect(card_min, card_max, 0.08f, 4);
-		paint_polygon(shapes, round_rect(card_min + glm::vec2(0.03f, -0.03f), card_max + glm::vec2(0.03f, -0.03f), 0.08f, 4), glm::u8vec4(10, 5, 4, 120));
-		paint_polygon(shapes, card, kPaper);
-
-		// Meadow with a wavy top edge.
-		std::vector< glm::vec2 > hill;
-		int steps = 40;
-		for (int i = 0; i <= steps; ++i) {
-			float x = glm::mix(card_min.x + 0.02f, card_max.x - 0.02f, float(i) / float(steps));
-			hill.push_back(glm::vec2(x, meadow_top + 0.035f * std::sin(x * 3.1f) + 0.02f * std::sin(x * 7.3f + 1.0f)));
-		}
-		for (size_t i = 0; i + 1 < hill.size(); ++i) {
-			// Split into vertical strips so the concave edge fills correctly.
-			glm::vec2 a = hill[i], b = hill[i + 1];
-			glm::vec2 a0(a.x, card_min.y + 0.02f), b0(b.x, card_min.y + 0.02f);
-			tri(shapes, a0, b0, b, kGrass);
-			tri(shapes, a0, b, a, kGrass);
-		}
-		for (int i = 0; i < 30; ++i) {
-			float x = glm::mix(card_min.x + 0.1f, card_max.x - 0.1f, hash01(i, 5, 50));
-			float y = glm::mix(card_min.y + 0.06f, meadow_top - 0.06f, hash01(i, 6, 51));
-			glm::vec2 base(x, y);
-			float lean = (hash01(i, 7, 52) - 0.5f) * 0.03f;
-			paint_outline(shapes, {base, base + glm::vec2(lean, 0.05f)}, 0.012f, kGrassDark, false);
-		}
-		paint_outline(shapes, hill, 0.018f, kInk, false);
-		paint_outline(shapes, card, 0.022f, kInk, true);
+	// Cover the window with the poster. A wider window crops the top and bottom.
+	if (sprite_vao_ != 0 && !portraits_.empty() && portraits_[0].tex != 0) {
+		Portrait const &poster = portraits_[0];
+		float image_aspect = std::max(poster.aspect, 0.01f);
+		float hw = asp;
+		float hh = 1.0f;
+		if (asp > image_aspect) hh = asp / image_aspect;
+		else hw = image_aspect;
+		struct SpriteVertex {
+			glm::vec3 Position;
+			glm::u8vec4 Color;
+			glm::vec2 TexCoord;
+		};
+		glm::u8vec4 white(255, 255, 255, 255);
+		SpriteVertex quad[6] = {
+			{glm::vec3(-hw, -hh, 0.0f), white, glm::vec2(poster.uv_min.x, poster.uv_min.y)},
+			{glm::vec3( hw, -hh, 0.0f), white, glm::vec2(poster.uv_max.x, poster.uv_min.y)},
+			{glm::vec3( hw,  hh, 0.0f), white, glm::vec2(poster.uv_max.x, poster.uv_max.y)},
+			{glm::vec3(-hw, -hh, 0.0f), white, glm::vec2(poster.uv_min.x, poster.uv_min.y)},
+			{glm::vec3( hw,  hh, 0.0f), white, glm::vec2(poster.uv_max.x, poster.uv_max.y)},
+			{glm::vec3(-hw,  hh, 0.0f), white, glm::vec2(poster.uv_min.x, poster.uv_max.y)},
+		};
+		glBindVertexArray(sprite_vao_);
+		glBindBuffer(GL_ARRAY_BUFFER, sprite_vbo_);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STREAM_DRAW);
+		glUseProgram(color_texture_program->program);
+		glUniformMatrix4fv(color_texture_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_ui));
+		glUniform1f(color_texture_program->SHARPEN_float, 0.35f);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, poster.tex);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glUniform1f(color_texture_program->SHARPEN_float, 0.0f);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+		glUseProgram(0);
 	}
 
 	// Buttons lift on hover and press down while held.
@@ -351,52 +380,29 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		if (hover_ != button) return glm::vec2(0.0f);
 		return pressing_ == button ? glm::vec2(0.0f, -0.012f) : glm::vec2(0.0f, 0.012f);
 	};
-	auto paint_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover) {
-		glm::vec2 lift = button_lift(button);
-		auto body = round_rect(center - kButtonHalf + lift, center + kButtonHalf + lift, 0.06f, 4);
-		auto shadow = round_rect(center - kButtonHalf + glm::vec2(0.0f, -0.025f), center + kButtonHalf + glm::vec2(0.0f, -0.025f), 0.06f, 4);
-		paint_polygon(shapes, shadow, kInk);
-		paint_polygon(shapes, body, hover_ == button ? fill_hover : fill);
-		paint_outline(shapes, body, 0.02f, kInk, true);
-	};
-	paint_button(Button::Start, kStartCenter, kCherry, kCherryLight);
-	paint_button(Button::How, kHowCenter, kPaperShade, kPaperLight);
-	paint_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight);
-
-	glBindBuffer(GL_ARRAY_BUFFER, shapes_vbo_);
-	glBufferData(GL_ARRAY_BUFFER, shapes.size() * sizeof(Vertex), shapes.data(), GL_STREAM_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glUseProgram(color_program->program);
-	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_ui));
-	glBindVertexArray(shapes_vao_);
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)shapes.size());
-	glBindVertexArray(0);
-	glUseProgram(0);
-
-	{ // Text goes last so it sits on top of everything.
-		TextRenderer text(clip_from_ui);
-		// Shrink the title on narrow windows so it stays inside the card.
-		float title_h = std::min(0.34f, (2.0f * card_hw - 0.3f) / text_width(*title_font, kTitle));
-		draw_bold_text(text, *title_font, kTitle, glm::vec2(0.0f, 0.42f) + glm::vec2(0.012f, -0.012f), title_h, 0.006f, kInk);
-		draw_bold_text(text, *title_font, kTitle, glm::vec2(0.0f, 0.42f), title_h, 0.004f, kCherry);
-
-		draw_bold_text(text, *ui_font, "START", kStartCenter + button_lift(Button::Start), 0.11f, 0.002f, kPaper);
-		draw_bold_text(text, *ui_font, "HOW TO PLAY", kHowCenter + button_lift(Button::How), 0.09f, 0.002f, kInk);
-		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.11f, 0.002f, kInk);
+	Mesh controls;
+	{
+		// A dark plate so the labels stay readable over the fighters' feet.
+		paint_polygon(controls, round_rect(glm::vec2(-0.52f, -1.05f), glm::vec2(0.52f, -0.40f), 0.08f, 4), glm::u8vec4(16, 10, 12, 215));
+		auto paint_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover) {
+			glm::vec2 lift = button_lift(button);
+			auto body = round_rect(center - kButtonHalf + lift, center + kButtonHalf + lift, 0.05f, 4);
+			auto shadow = round_rect(center - kButtonHalf + glm::vec2(0.0f, -0.02f), center + kButtonHalf + glm::vec2(0.0f, -0.02f), 0.05f, 4);
+			paint_polygon(controls, shadow, kInk);
+			paint_polygon(controls, body, hover_ == button ? fill_hover : fill);
+			paint_outline(controls, body, 0.016f, kInk, true);
+		};
+		paint_button(Button::Start, kStartCenter, kCherry, kCherryLight);
+		paint_button(Button::How, kHowCenter, kPaperShade, kPaperLight);
+		paint_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight);
 	}
+	draw_color_mesh(controls, clip_from_ui);
 
-	{ // Film overlay last, already in clip space, so it covers the whole screen including text.
-		Mesh fx;
-		paint_film(fx, time_);
-		glBindBuffer(GL_ARRAY_BUFFER, shapes_vbo_);
-		glBufferData(GL_ARRAY_BUFFER, fx.size() * sizeof(Vertex), fx.data(), GL_STREAM_DRAW);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glUseProgram(color_program->program);
-		glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
-		glBindVertexArray(shapes_vao_);
-		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)fx.size());
-		glBindVertexArray(0);
-		glUseProgram(0);
+	{
+		TextRenderer text(clip_from_ui);
+		draw_bold_text(text, *ui_font, "START", kStartCenter + button_lift(Button::Start), 0.075f, 0.002f, kCream);
+		draw_bold_text(text, *ui_font, "HOW TO PLAY", kHowCenter + button_lift(Button::How), 0.062f, 0.002f, kInk);
+		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.075f, 0.002f, kInk);
 	}
 
 	glDisable(GL_BLEND);

@@ -35,6 +35,37 @@ struct ColorVertex {
 	glm::u8vec4 Color;
 };
 
+// Rounded rectangle in clip space. rx and ry are separate so a corner stays round on a wide window.
+void add_round_rect(std::vector< ColorVertex > &dst, glm::vec2 mn, glm::vec2 mx, float rx, float ry, glm::u8vec4 color) {
+	rx = std::min(rx, 0.5f * std::max(0.0f, mx.x - mn.x));
+	ry = std::min(ry, 0.5f * std::max(0.0f, mx.y - mn.y));
+	if (rx < 1e-5f || ry < 1e-5f) return;
+	glm::vec2 c = 0.5f * (mn + mx);
+	glm::vec2 centers[4] = {
+		glm::vec2(mx.x - rx, mn.y + ry),
+		glm::vec2(mx.x - rx, mx.y - ry),
+		glm::vec2(mn.x + rx, mx.y - ry),
+		glm::vec2(mn.x + rx, mn.y + ry),
+	};
+	constexpr float tau = 6.2831853f;
+	constexpr int segs = 4;
+	std::vector< glm::vec2 > pts;
+	for (int k = 0; k < 4; ++k) {
+		float a0 = -tau / 4.0f + float(k) * tau / 4.0f;
+		for (int i = 0; i <= segs; ++i) {
+			float a = a0 + float(i) / float(segs) * tau / 4.0f;
+			pts.push_back(centers[k] + glm::vec2(std::cos(a) * rx, std::sin(a) * ry));
+		}
+	}
+	for (size_t i = 0; i < pts.size(); ++i) {
+		glm::vec2 a = pts[i];
+		glm::vec2 b = pts[(i + 1) % pts.size()];
+		dst.push_back({glm::vec3(c, 0.0f), color});
+		dst.push_back({glm::vec3(a, 0.0f), color});
+		dst.push_back({glm::vec3(b, 0.0f), color});
+	}
+}
+
 // Soft oval tucked under the feet. The sprite is centered on `center`, so the feet sit at the bottom edge.
 void add_foot_shadow(std::vector< ColorVertex > &verts, glm::vec2 center, glm::vec2 half, glm::u8vec3 color) {
 	float rx = std::max(half.x * 0.88f, 0.42f);
@@ -406,6 +437,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	glViewport(0, 0, (GLsizei)drawable_size.x, (GLsizei)drawable_size.y);
 	draw_bar();
 	draw_unit_stats();
+	if (!practice_) draw_match_clock();
 	if (practice_) draw_practice_banner();
 	if (won_) draw_victory_overlay();
 	else if (lost_) draw_defeat_overlay();
@@ -1404,7 +1436,7 @@ void PlayMode::draw_troop_description() {
 
 // Counts living fighters on each side; the baskets are bases, so they aren't included.
 void PlayMode::draw_unit_stats() {
-	if (window_size.x == 0 || window_size.y == 0) return;
+	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
 
 	int blues = 0;
 	int reds = 0;
@@ -1414,29 +1446,120 @@ void PlayMode::draw_unit_stats() {
 		else if (troop->get_team() == Team::RED) ++reds;
 	}
 
+	float text_px = float(window_size.y) * 0.034f;
+	float margin_px = text_px * 0.55f;
+	float row_px = text_px * 1.55f;
+	auto chip_center = [&](int index) {
+		float x = margin_px;
+		float y = margin_px + text_px * 0.5f + row_px * float(index);
+		return glm::vec2(
+			(x / float(window_size.x)) * 2.0f - 1.0f,
+			1.0f - (y / float(window_size.y)) * 2.0f
+		);
+	};
+
+	struct Chip {
+		std::string text;
+		glm::vec2 anchor_left;
+		glm::u8vec4 fill;
+	};
+	Chip chips[2] = {
+		{"BLUE " + std::to_string(blues), chip_center(0), glm::u8vec4(36, 84, 176, 235)},
+		{"RED " + std::to_string(reds), chip_center(1), glm::u8vec4(176, 42, 48, 235)},
+	};
+
 	float px_w = 2.0f / float(window_size.x);
 	float px_h = 2.0f / float(window_size.y);
-	float line_px = float(window_size.y) * 0.04f;
-	float margin_px = line_px * 0.5f;
-	float scale = line_px / float(ui_font->pixel_height);
-	glm::vec3 x_axis(scale * px_w, 0.0f, 0.0f);
-	glm::vec3 y_axis(0.0f, scale * px_h, 0.0f);
+	float scale = text_px / float(ui_font->pixel_height);
+	float pad_x = text_px * 0.42f;
+	float pad_y = text_px * 0.22f;
+	std::vector< ColorVertex > chips_mesh;
+	glm::vec3 anchors[2];
+	for (int i = 0; i < 2; ++i) {
+		float advance = 0.0f;
+		ui_font->layout(chips[i].text, &advance);
+		float text_w = advance * scale;
+		float left = chips[i].anchor_left.x;
+		float cy = chips[i].anchor_left.y;
+		glm::vec2 mn(left - pad_x * px_w, cy - (text_px * 0.5f + pad_y) * px_h);
+		glm::vec2 mx(left + (text_w + pad_x) * px_w, cy + (text_px * 0.5f + pad_y) * px_h);
+		add_round_rect(chips_mesh, mn, mx, pad_y * px_w, pad_y * px_h, glm::u8vec4(27, 16, 18, 255));
+		float inset = text_px * 0.06f;
+		add_round_rect(chips_mesh,
+			mn + glm::vec2(inset * px_w, inset * px_h),
+			mx - glm::vec2(inset * px_w, inset * px_h),
+			pad_y * px_w, pad_y * px_h, chips[i].fill);
+		anchors[i] = glm::vec3(left, cy - kFontCapCenter * text_px * px_h, 0.0f);
+	}
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, chips_mesh.size() * sizeof(ColorVertex), chips_mesh.data(), GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)chips_mesh.size());
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
 	{
 		TextRenderer renderer(glm::mat4(1.0f));
-		auto draw_line = [&](std::string const &text, int index, glm::u8vec4 color) {
-			glm::vec3 anchor(
-				-1.0f + margin_px * px_w,
-				1.0f - (margin_px + line_px * 1.25f * float(index) + line_px) * px_h,
-				0.0f
-			);
-			renderer.draw_text(*ui_font, text, anchor + glm::vec3(1.5f * px_w, -1.5f * px_h, 0.0f), x_axis, y_axis, glm::u8vec4(27, 16, 18, 200));
-			renderer.draw_text(*ui_font, text, anchor, x_axis, y_axis, color);
-		};
-		draw_line("BLUE " + std::to_string(blues), 0, glm::u8vec4(255, 236, 196, 255));
-		draw_line("RED " + std::to_string(reds), 1, glm::u8vec4(255, 170, 140, 255));
+		glm::vec3 x_axis(scale * px_w, 0.0f, 0.0f);
+		glm::vec3 y_axis(0.0f, scale * px_h, 0.0f);
+		glm::u8vec4 cream(255, 236, 196, 255);
+		renderer.draw_text(*ui_font, chips[0].text, anchors[0], x_axis, y_axis, cream);
+		renderer.draw_text(*ui_font, chips[1].text, anchors[1], x_axis, y_axis, cream);
+	}
+	glDisable(GL_BLEND);
+}
+
+void PlayMode::draw_match_clock() {
+	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
+
+	int remain = (int)std::ceil(World::get_world()->match_time_remaining);
+	if (remain < 0) remain = 0;
+	int minutes = remain / 60;
+	int seconds = remain % 60;
+	std::string text = std::to_string(minutes) + ":" + (seconds < 10 ? "0" : "") + std::to_string(seconds);
+	bool urgent = remain <= 60;
+
+	float text_px = float(window_size.y) * 0.04f;
+	float advance = 0.0f;
+	ui_font->layout(text, &advance);
+	float scale = text_px / float(ui_font->pixel_height);
+	float text_w = advance * scale;
+	float pad_x = text_px * 0.55f;
+	float pad_y = text_px * 0.28f;
+	float px_w = 2.0f / float(window_size.x);
+	float px_h = 2.0f / float(window_size.y);
+	float top = text_px * 0.45f;
+	float cy = 1.0f - (top + text_px * 0.5f) * px_h;
+	glm::vec2 mn(-(text_w * 0.5f + pad_x) * px_w, cy - (text_px * 0.5f + pad_y) * px_h);
+	glm::vec2 mx( (text_w * 0.5f + pad_x) * px_w, cy + (text_px * 0.5f + pad_y) * px_h);
+
+	glm::u8vec4 fill = urgent ? glm::u8vec4(176, 42, 48, 240) : glm::u8vec4(236, 222, 186, 235);
+	glm::u8vec4 glyph = urgent ? glm::u8vec4(255, 236, 196, 255) : glm::u8vec4(27, 16, 18, 255);
+	std::vector< ColorVertex > mesh;
+	add_round_rect(mesh, mn, mx, pad_y * px_w, pad_y * px_h, glm::u8vec4(27, 16, 18, 255));
+	float inset = text_px * 0.06f;
+	add_round_rect(mesh, mn + glm::vec2(inset * px_w, inset * px_h), mx - glm::vec2(inset * px_w, inset * px_h), pad_y * px_w, pad_y * px_h, fill);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, mesh.size() * sizeof(ColorVertex), mesh.data(), GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)mesh.size());
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+	{
+		TextRenderer renderer(glm::mat4(1.0f));
+		glm::vec3 anchor(-0.5f * text_w * px_w, cy - kFontCapCenter * text_px * px_h, 0.0f);
+		renderer.draw_text(*ui_font, text, anchor, glm::vec3(scale * px_w, 0.0f, 0.0f), glm::vec3(0.0f, scale * px_h, 0.0f), glyph);
 	}
 	glDisable(GL_BLEND);
 }
@@ -1577,13 +1700,8 @@ void PlayMode::draw_bar() {
 	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
 
 	float y1 = -1.0f + 2.0f * bar_frac_;
-	struct ColorVertex {
-		glm::vec3 Position;
-		glm::u8vec4 Color;
-	};
 	glm::u8vec4 wood(96, 62, 40, 255);
 	glm::u8vec4 lip(214, 176, 122, 255);
-	glm::u8vec4 slot(62, 38, 24, 255);
 	ColorVertex panel[12] = {
 		{glm::vec3(-1.0f, -1.0f, 0.0f), wood},
 		{glm::vec3(1.0f, -1.0f, 0.0f), wood},
@@ -1603,28 +1721,28 @@ void PlayMode::draw_bar() {
 	float side = place.side;
 	auto ndc_x = [&](float x) { return (x / float(window_size.x)) * 2.0f - 1.0f; };
 	auto ndc_y = [&](float y) { return 1.0f - (y / float(window_size.y)) * 2.0f; };
-	float sy0 = ndc_y(place.slot_y + side);
-	float sy1 = ndc_y(place.slot_y);
-	auto slot_well = [&](float slot_x) {
-		float sx0 = ndc_x(slot_x);
-		float sx1 = ndc_x(slot_x + side);
-		ColorVertex well[6] = {
-			{glm::vec3(sx0, sy0, 0.0f), slot},
-			{glm::vec3(sx1, sy0, 0.0f), slot},
-			{glm::vec3(sx1, sy1, 0.0f), slot},
-			{glm::vec3(sx0, sy0, 0.0f), slot},
-			{glm::vec3(sx1, sy1, 0.0f), slot},
-			{glm::vec3(sx0, sy1, 0.0f), slot},
-		};
-		return std::vector< ColorVertex >(well, well + 6);
-	};
+	auto ndc_w = [&](float px) { return px / float(window_size.x) * 2.0f; };
+	auto ndc_h = [&](float px) { return px / float(window_size.y) * 2.0f; };
+	int resources = World::get_world()->get_player_resources();
+	float rad_px = side * 0.18f;
 	std::vector< ColorVertex > wells;
 	int slot_index = 0;
 	for (auto const &anim : characters_) {
 		if (!anim.show_in_bar) continue;
-		std::vector< ColorVertex > well = slot_well(bar_slot_x(place, slot_index));
-		wells.insert(wells.end(), well.begin(), well.end());
+		float slot_x = bar_slot_x(place, slot_index);
 		++slot_index;
+		TroopDataAsset const *asset = asset_for(anim.troop_name);
+		bool selected = troop_type_from_name(anim.troop_name) == selected_troop;
+		bool affordable = asset == nullptr || resources >= asset->resource_cost;
+		float outline = side * (selected ? 0.07f : 0.04f);
+		glm::vec2 inner_min(ndc_x(slot_x), ndc_y(place.slot_y + side));
+		glm::vec2 inner_max(ndc_x(slot_x + side), ndc_y(place.slot_y));
+		glm::vec2 outer_min(ndc_x(slot_x - outline), ndc_y(place.slot_y + side + outline));
+		glm::vec2 outer_max(ndc_x(slot_x + side + outline), ndc_y(place.slot_y - outline));
+		glm::u8vec4 edge = selected ? glm::u8vec4(255, 210, 70, 255) : glm::u8vec4(27, 16, 18, 255);
+		glm::u8vec4 fill = affordable ? glm::u8vec4(62, 38, 24, 255) : glm::u8vec4(38, 26, 20, 255);
+		add_round_rect(wells, outer_min, outer_max, ndc_w(rad_px + outline), ndc_h(rad_px + outline), edge);
+		add_round_rect(wells, inner_min, inner_max, ndc_w(rad_px), ndc_h(rad_px), fill);
 	}
 
 	glDisable(GL_DEPTH_TEST);
@@ -1643,31 +1761,91 @@ void PlayMode::draw_bar() {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glUseProgram(0);
 
-	float inset = side * 0.08f;
-	float icon_px = side - inset * 2.0f;
-	glm::vec2 square_half(icon_px / float(window_size.x), icon_px / float(window_size.y));
-	// Fit a cropped sprite inside a square slot without stretching it.
-	auto fit_slot = [&](glm::vec2 sprite_half, float slot_px) {
+	// Scale every portrait so its long side matches, then clip anything past the slot.
+	constexpr float icon_scale = 1.25f;
+	auto cover_slot = [&](glm::vec2 sprite_half) {
 		float aspect = sprite_half.x / std::max(sprite_half.y, 1e-4f);
-		float icon_w = slot_px;
-		float icon_h = slot_px;
-		if (aspect >= 1.0f) icon_h = slot_px / aspect;
-		else icon_w = slot_px * aspect;
+		float icon_w = side * icon_scale;
+		float icon_h = side * icon_scale;
+		if (aspect >= 1.0f) icon_h = icon_w / aspect;
+		else icon_w = icon_h * aspect;
 		return glm::vec2(icon_w / float(window_size.x), icon_h / float(window_size.y));
 	};
+	auto clip_slot = [&](float slot_x) {
+		float sx = float(drawable_size.x) / float(std::max(window_size.x, 1u));
+		float sy = float(drawable_size.y) / float(std::max(window_size.y, 1u));
+		int x = (int)std::floor(slot_x * sx);
+		int y = (int)std::floor((float(window_size.y) - (place.slot_y + side)) * sy);
+		int w = std::max(1, (int)std::ceil(side * sx));
+		int h = std::max(1, (int)std::ceil(side * sy));
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(x, y, w, h);
+	};
+	struct CostBadge {
+		std::string text;
+		glm::vec2 center;
+		float height = 0.0f;
+		glm::u8vec4 color;
+	};
+	std::vector< CostBadge > costs;
+	std::vector< ColorVertex > badges;
 	int icon_index = 0;
 	for (auto const &anim : characters_) {
 		if (!anim.show_in_bar || !anim.walk.ready()) continue;
 		float x = bar_slot_x(place, icon_index);
 		++icon_index;
+		TroopDataAsset const *asset = asset_for(anim.troop_name);
+		bool affordable = asset == nullptr || resources >= asset->resource_cost;
 		glm::vec2 icon_center(ndc_x(x + side * 0.5f), ndc_y(place.slot_y + side * 0.5f));
-		glm::vec2 icon_half = anim.fit_bar_icon ? fit_slot(anim.walk.half, icon_px) : square_half;
-		draw_sprite(glm::mat4(1.0f), icon_center, icon_half, glm::u8vec4(255, 255, 255, 255), anim.walk.frames[0], anim.walk.uv_min, anim.walk.uv_max);
+		glm::vec2 icon_half = cover_slot(anim.walk.half);
+		glm::u8vec4 tint = affordable ? glm::u8vec4(255, 255, 255, 255) : glm::u8vec4(110, 100, 96, 255);
+		clip_slot(x);
+		draw_sprite(glm::mat4(1.0f), icon_center, icon_half, tint, anim.walk.frames[0], anim.walk.uv_min, anim.walk.uv_max);
+		glDisable(GL_SCISSOR_TEST);
+		if (asset == nullptr) continue;
+		float badge_h = side * 0.32f;
+		float badge_w = side * 0.40f;
+		float pad = side * 0.07f;
+		float bx1 = x + side - pad;
+		float by1 = place.slot_y + side - pad;
+		glm::vec2 bmin(ndc_x(bx1 - badge_w), ndc_y(by1));
+		glm::vec2 bmax(ndc_x(bx1), ndc_y(by1 - badge_h));
+		add_round_rect(badges, bmin, bmax, ndc_w(badge_h * 0.35f), ndc_h(badge_h * 0.35f), glm::u8vec4(27, 16, 18, 230));
+		costs.push_back(CostBadge{
+			std::to_string(asset->resource_cost),
+			0.5f * (bmin + bmax),
+			ndc_h(badge_h * 0.72f),
+			affordable ? glm::u8vec4(255, 236, 196, 255) : glm::u8vec4(170, 130, 120, 255)
+		});
 	}
-	
+	if (!badges.empty()) {
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+		glBufferData(GL_ARRAY_BUFFER, badges.size() * sizeof(ColorVertex), badges.data(), GL_DYNAMIC_DRAW);
+		glUseProgram(color_program->program);
+		glBindVertexArray(bar_vao_);
+		glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)badges.size());
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glUseProgram(0);
+		{
+			TextRenderer renderer(glm::mat4(1.0f));
+			for (CostBadge const &cost : costs) {
+				float advance = 0.0f;
+				ui_font->layout(cost.text, &advance);
+				float glyph_px = cost.height * 0.5f * float(window_size.y);
+				float unit = glyph_px / float(ui_font->pixel_height);
+				float sx = unit * 2.0f / float(window_size.x);
+				float sy = unit * 2.0f / float(window_size.y);
+				glm::vec3 at(cost.center.x - 0.5f * advance * sx, cost.center.y - kFontCapCenter * cost.height, 0.0f);
+				renderer.draw_text(*ui_font, cost.text, at, glm::vec3(sx, 0.0f, 0.0f), glm::vec3(0.0f, sy, 0.0f), cost.color);
+			}
+		}
+		glDisable(GL_BLEND);
+	}
 
-	auto ndc_w = [&](float px) { return px / float(window_size.x) * 2.0f; };
-	auto ndc_h = [&](float px) { return px / float(window_size.y) * 2.0f; };
 	float coin_cx = ndc_x(place.coin_cx);
 	float coin_cy = ndc_y(place.coin_cy);
 	float coin_rx = ndc_w(place.coin_r);
@@ -1752,7 +1930,14 @@ void PlayMode::draw_bar() {
 		glm::vec2 cursor(ndc_x(mouse.x), ndc_y(mouse.y));
 		CharacterAnim const *anim = find_anim(selected_troop_name(selected_troop), Team::BLUE);
 		if (anim != nullptr && anim->walk.ready()) {
-			glm::vec2 ghost_half = anim->fit_bar_icon ? fit_slot(anim->walk.half, side) : glm::vec2(side / float(window_size.x), side / float(window_size.y));
+			float ghost_aspect = anim->walk.half.x / std::max(anim->walk.half.y, 1e-4f);
+			float ghost_w = side;
+			float ghost_h = side;
+			if (anim->fit_bar_icon) {
+				if (ghost_aspect >= 1.0f) ghost_h = side / ghost_aspect;
+				else ghost_w = side * ghost_aspect;
+			}
+			glm::vec2 ghost_half(ghost_w / float(window_size.x), ghost_h / float(window_size.y));
 			draw_sprite(glm::mat4(1.0f), cursor, ghost_half, glm::u8vec4(255, 255, 255, 210), anim->walk.frames[0], anim->walk.uv_min, anim->walk.uv_max);
 		}
 	}

@@ -12,6 +12,7 @@ public:
     
     float attack_timer = (data) ? data->attack_rate : 0.0f;
     int shot_cycle = -1;
+    int sound_cycle = -1;
 
     std::weak_ptr<Troop> target_troop;
 

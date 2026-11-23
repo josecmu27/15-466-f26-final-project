@@ -5,8 +5,9 @@
  *
  * Draws in "ui space": y runs from -1 (bottom) to 1 (top), x from -aspect to
  * aspect, so layout does not stretch when the window is resized.
- * Clicking START or pressing Enter/Space switches to PlayMode.
- * Clicking HOW TO PLAY opens the tutorial. Clicking QUIT or pressing Escape closes the game.
+ * The backdrop is the title poster. Clicking START or pressing Enter/Space switches to
+ * PlayMode. Clicking HOW TO PLAY opens the tutorial. Clicking QUIT or pressing
+ * Escape closes the game.
  */
 
 #include "Mode.hpp"
@@ -43,11 +44,23 @@ private:
 	Button hover_ = Button::None;
 	Button pressing_ = Button::None; // button the left mouse went down on
 
+	// Tight-cropped character used as a poster figure on the title screen.
+	struct Portrait {
+		GLuint tex = 0;
+		glm::vec2 uv_min = glm::vec2(0.0f);
+		glm::vec2 uv_max = glm::vec2(1.0f);
+		float aspect = 1.0f; // crop width / crop height
+	};
+
 	float aspect() const;
 	glm::vec2 mouse_ui() const;
 	Button button_at(glm::vec2 ui) const;
 	void quit();
+	Portrait load_portrait(std::string const &file);
 
 	GLuint shapes_vbo_ = 0;
 	GLuint shapes_vao_ = 0;
+	GLuint sprite_vbo_ = 0;
+	GLuint sprite_vao_ = 0;
+	std::vector< Portrait > portraits_;
 };
