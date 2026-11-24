@@ -33,6 +33,10 @@ struct Map {
 
 	static char const level_0[];
 	static char const level_1[];
+	static char const level_2[];
+
+	glm::ivec2 friendly_cell;
+	glm::ivec2 enemy_cell;
 
 	Map(Map const &) = delete;
 	Map &operator=(Map const &) = delete;
@@ -51,6 +55,10 @@ struct Map {
 
 	// Friendly troops may be placed on walkable cells west of the river.
 	bool can_place(int col, int row) const;
+
+	bool near_base(int col, int row, bool is_enemy, float range) const;
+
+	float place_range = 6.0f;
 
 	// `hover` outside the grid hides the cursor mark.
 	void draw(glm::mat4 const &clip_from_world, float time, int hover_col, int hover_row, std::vector<glm::vec2> const &troop_positions) const;
@@ -122,9 +130,6 @@ private:
 	mutable std::vector< Vertex > frame_;
 	mutable GLuint frame_vbo_ = 0;
 	mutable GLuint frame_vao_ = 0;
-
-	glm::ivec2 friendly_cell;
-	glm::ivec2 enemy_cell;
 
 	void load_base_sprite();
 	glm::vec2 base_anchor_ = glm::vec2(0.0f);

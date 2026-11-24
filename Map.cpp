@@ -159,6 +159,12 @@ Map::Map() {
 }
 
 char const Map::level_0[] =
+	".....~~.....\n"
+	"FF...==...EE\n"
+	"FF...~~.o.EE\n"
+	".....~~.....\n";
+
+char const Map::level_1[] =
 	"........~~........\n"
 	"........==........\n"
 	"........~~........\n"
@@ -170,7 +176,7 @@ char const Map::level_0[] =
 	"........==.o......\n"
 	"........~~........\n";
 
-char const Map::level_1[] =
+char const Map::level_2[] =
 	"FF................\n"
 	"FF................\n"
 	"..................\n"
@@ -234,10 +240,14 @@ bool Map::is_walkable(int col, int row) const {
 
 bool Map::can_place(int col, int row) const {
 	if (!is_walkable(col, row)) return false;
-	if (cols_ < 4) return true;
-	int width = cols_ >= 8 ? 2 : 1;
-	int river_col = (cols_ - width) / 2;
-	return col < river_col;
+	return near_base(col, row, false, place_range);
+}
+
+bool Map::near_base(int col, int row, bool is_enemy, float range) const {
+	glm::ivec2 base = is_enemy ? enemy_cell : friendly_cell;
+	float dx = col - (base.x + 0.5f);
+	float dy = row - (base.y + 0.5f);
+	return dx * dx + dy * dy <= range * range;
 }
 
 glm::vec3 Map::bounds_min() const {
@@ -278,6 +288,22 @@ void Map::draw(glm::mat4 const &clip_from_world, float time, int hover_col, int 
 		glUseProgram(0);
 	}
 
+	PlayMode *play_mode = World::get_world()->play_mode;
+
+	if (play_mode->dragging_) {
+		Mesh mark;
+		for (int row = 0; row < rows_; row++) {
+			for (int col = 0; col < cols_; col++) {
+				if (can_place(col, row)) {
+					glm::vec2 c(cell_center(col, row));
+					paint_polygon(mark, shape_round_rect(c - glm::vec2(tile_size_ * 0.5f), c + glm::vec2(tile_size_ * 0.5f), 0.0f, 1, 1, 0.0f), glm::u8vec4(255, 255, 255, 25));
+				}
+			}
+		}
+		upload(frame_vbo_, frame_vao_, mark);
+		draw_uploaded(frame_vao_, (GLuint)mark.size(), clip_from_world);
+	}
+
 	if (in_bounds(hover_col, hover_row)) {
 		glm::vec2 c(cell_center(hover_col, hover_row));
 		float h = tile_size_ * 0.46f;
@@ -293,7 +319,6 @@ void Map::draw(glm::mat4 const &clip_from_world, float time, int hover_col, int 
 		draw_uploaded(frame_vao_, (GLuint)mark.size(), clip_from_world);
 	}
 
-	PlayMode *play_mode = World::get_world()->play_mode;
 	if (play_mode->box_dragging_) {
 		glm::vec2 mn = (glm::min(glm::vec2(play_mode->box_start_), glm::vec2(play_mode->box_end_)));
 		glm::vec2 mx = (glm::max(glm::vec2(play_mode->box_start_), glm::vec2(play_mode->box_end_)));
