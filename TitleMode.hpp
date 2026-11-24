@@ -6,12 +6,14 @@
  * Draws in "ui space": y runs from -1 (bottom) to 1 (top), x from -aspect to
  * aspect, so layout does not stretch when the window is resized.
  * The backdrop is the title poster. Clicking START or pressing Enter/Space switches to
- * PlayMode. Clicking HOW TO PLAY opens the tutorial. Clicking QUIT or pressing
- * Escape closes the game.
+ * PlayMode. Clicking HOW TO PLAY opens the tutorial. Clicking SETTINGS opens a
+ * panel over the poster (Escape closes it). Clicking QUIT or pressing Escape
+ * closes the game.
  */
 
 #include "Mode.hpp"
 #include "GL.hpp"
+#include "UiDraw.hpp"
 
 #include <glm/glm.hpp>
 
@@ -26,10 +28,10 @@ struct TitleMode : Mode {
 	virtual void update(float elapsed) override;
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
-	struct Vertex {
-		glm::vec3 Position;
-		glm::u8vec4 Color;
-	};
+	using Vertex = UiDraw::Vertex;
+
+	// Clickable things on the settings panel.
+	enum class Control { None, MusicDown, MusicUp, SfxDown, SfxUp, Fullscreen, Film, Speed, Back };
 
 private:
 	float time_ = 0.0f; // drives the film grain/scratch flicker
@@ -41,9 +43,16 @@ private:
 	glm::uvec2 drawable_size_ = glm::uvec2(1280, 720);
 	glm::vec2 mouse_ = glm::vec2(0.0f);
 
-	enum class Button { None, Level1, Level2, How, Quit };
+	enum class Button { None, Level1, Level2, How, Settings, Quit };
 	Button hover_ = Button::None;
 	Button pressing_ = Button::None; // button the left mouse went down on
+
+	// While the settings panel is open it takes all input; the main buttons are inert.
+	bool settings_open_ = false;
+	Control control_hover_ = Control::None;
+	Control control_pressing_ = Control::None;
+	Control control_at(glm::vec2 ui) const;
+	void apply(Control control);
 
 	// Tight-cropped character used as a poster figure on the title screen.
 	struct Portrait {

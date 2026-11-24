@@ -160,6 +160,8 @@ const game_names = [
 	maek.CPP('TextRenderer.cpp'),
 	maek.CPP('GameFonts.cpp'),
 	maek.CPP('GameAudio.cpp'),
+	maek.CPP('Settings.cpp'),
+	maek.CPP('UiDraw.cpp'),
 	maek.CPP('Sound.cpp'),
 	maek.CPP('load_wav.cpp'),
 	maek.CPP('load_opus.cpp'),

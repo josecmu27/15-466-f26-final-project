@@ -102,11 +102,6 @@ struct PlayMode : Mode {
 	GLuint bar_vbo_ = 0;
 	GLuint bar_vao_ = 0;
 
-	// TODO: Remove this after prototype!
-	float troop_spawn_rate = 7.5f;
-	float troop_spawn_timer = 0.0f;
-
-	void spawn_vegetable_troop();
 	void advance_practice();
 	void spawn_practice_enemy();
 	void draw_practice_hints(glm::mat4 const &clip);
@@ -130,4 +125,7 @@ struct PlayMode : Mode {
 	bool start_real_ = false;
 
 	char const *level_ascii;
+	// Summary buttons (0 = PLAY, 1 = TITLE, -1 = none), for the title screen's hover and press look.
+	int practice_hover_ = -1;
+	int practice_pressed_ = -1;
 };

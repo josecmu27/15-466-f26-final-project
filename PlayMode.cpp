@@ -6,7 +6,9 @@
 #include "ColorTextureProgram.hpp"
 #include "GameAudio.hpp"
 #include "GameFonts.hpp"
+#include "Settings.hpp"
 #include "TextRenderer.hpp"
+#include "UiDraw.hpp"
 #include "data_path.hpp"
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
@@ -256,7 +258,10 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT && practice_) {
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		bool start_game = false;
-		if (practice_button(mouse, start_game)) return true;
+		if (practice_button(mouse, start_game)) {
+			practice_pressed_ = start_game ? 0 : 1;
+			return true;
+		}
 	}
 	if (evt.type == SDL_EVENT_MOUSE_MOTION) {
 		mouse = glm::vec2(evt.motion.x, evt.motion.y);
@@ -287,7 +292,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 		mouse = glm::vec2(evt.button.x, evt.button.y);
 		if (practice_) {
 			bool start_game = false;
+			practice_pressed_ = -1;
 			if (practice_button(mouse, start_game)) {
+				GameAudio::play(GameAudio::Sfx::UiConfirm);
 				if (start_game) start_real_ = true;
 				else leave_practice_ = true;
 				dragging_ = false;
@@ -331,7 +338,11 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 			for (auto &troop : world->troops) {
 				if (troop->is_selected()) command_count++;
 			}
-			if (command_count == 0) return true;
+			if (command_count == 0) {
+				// In the tutorial, say why nothing happened; the banner also asks for a selection.
+				if (practice_) GameAudio::play(GameAudio::Sfx::PlaceFail);
+				return true;
+			}
 			std::shared_ptr<Troop> target;
 			float best = std::numeric_limits<float>::infinity();
 			for (auto &troop : world->troops) {
@@ -387,14 +398,20 @@ void PlayMode::update(float elapsed) {
 	if (box_dragging_) mouse_to_world(box_end_);
 
 	if (practice_) {
-		time_ += elapsed;
-		advance_practice();
+		// Leaving is checked before pausing so Escape still works while paused.
 		if (leave_practice_ || start_real_) {
 			auto keep_alive = shared_from_this();
 			if (start_real_) Mode::set_current(std::make_shared< PlayMode >(Map::level_1));
 			else Mode::set_current(std::make_shared< TitleMode >());
 			return;
 		}
+		bool start_game = false;
+		int hover = practice_button(mouse, start_game) ? (start_game ? 0 : 1) : -1;
+		if (hover != practice_hover_ && hover != -1) GameAudio::play(GameAudio::Sfx::UiHover);
+		practice_hover_ = hover;
+		if (paused_) return;
+		time_ += elapsed;
+		advance_practice();
 		World::get_world()->update(elapsed);
 		return;
 	}
@@ -407,11 +424,13 @@ void PlayMode::update(float elapsed) {
 
 	if (paused_ || won_ || lost_) return;
 
-	time_ += elapsed;
-	troop_spawn_timer -= elapsed;
+	// Game speed scales only the battle; the camera above keeps using real time.
+	float battle_elapsed = elapsed * Settings::game_speed;
 
-	World::get_world()->update(elapsed);
-	spawn_director->update(elapsed);
+	time_ += battle_elapsed;
+
+	World::get_world()->update(battle_elapsed);
+	spawn_director->update(battle_elapsed);
 
 	if (enemy_basket_.expired()) {
 		won_ = true;
@@ -426,11 +445,6 @@ void PlayMode::update(float elapsed) {
 		dragging_ = false;
 		box_dragging_ = false;
 		return;
-	}
-
-	if (troop_spawn_timer < 0.0f){
-		spawn_vegetable_troop();
-		troop_spawn_timer = troop_spawn_rate;
 	}
 }
 
@@ -449,7 +463,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	World::get_world()->map.draw(clip, time_, hover_col, hover_row, {});
 	draw_troops(clip);
 	if (practice_) draw_practice_hints(clip);
-	World::get_world()->map.draw_film(glm::mat4(1.0f), time_);
+	if (Settings::film_effect) World::get_world()->map.draw_film(glm::mat4(1.0f), time_);
 	if (paused_) draw_pause_overlay();
 	if (dragging_ && World::get_world()->map.can_place(hover_col, hover_row)) {
 		glm::u8vec4 ghost(255, 255, 255, 170);
@@ -621,6 +635,7 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 	if (!World::get_world()->map.world_to_cell(glm::vec3(spawn_pos, 0.0f), col, row)) return;
 	if (!World::get_world()->map.can_place(col, row)) return;
 
+	size_t troops_before = World::get_world()->troops.size();
 	int resources_ = World::get_world()->get_player_resources();
 
 	if (selected_troop == TroopType::CHERRY_BRAWLER){
@@ -660,21 +675,16 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 		World::get_world()->troops.push_back(std::make_shared<Collector>(pos, &player_data.blueberry, Team::BLUE));
 	}
 
-	
+	// In the tutorial, troops wait where they're dropped until the player gives the first order,
+	// so the select and move steps aren't chasing a unit that wanders off toward the enemy basket.
+	if (practice_ && lesson_ < 3 && World::get_world()->troops.size() > troops_before) {
+		Order hold;
+		hold.type = OrderType::Hold;
+		World::get_world()->troops.back()->give_order(hold);
+	}
 }
 
 // Temp function for prototype
-void PlayMode::spawn_vegetable_troop()
-{
-	int col = (rand() % 6) + 10; // place between cols 10-16
-	int row = (rand() % 11); // place bewteen rows 0-10
-
-	if (!World::get_world()->map.is_walkable(col, row)) return;
-	
-	glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-	World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &player_data.cherry, Team::RED));
-}
-
 namespace {
 
 char const *practice_prompt(int lesson) {
@@ -702,10 +712,45 @@ bool blue_has_order(OrderType type) {
 	return false;
 }
 
-glm::vec2 window_from_clip(glm::vec2 clip, glm::uvec2 window) {
-	return glm::vec2(
-		(clip.x * 0.5f + 0.5f) * float(window.x),
-		(0.5f - clip.y * 0.5f) * float(window.y)
+// The move and attack lessons need a selected unit; right-clicking with nothing selected does nothing.
+bool needs_reselect(int lesson) {
+	if (lesson != 2 && lesson != 3) return false;
+	for (auto const &troop : World::get_world()->troops) {
+		if (troop && !troop->is_dead() && troop->get_team() == Team::BLUE && troop->is_selected()) return false;
+	}
+	return true;
+}
+
+// A walkable cell near `from` for the move lesson's flag: straight ahead toward the enemy first,
+// then rows above and below, then behind, so a river or rock in the way doesn't hide the flag.
+bool flag_spot(glm::vec2 from, glm::vec2 &spot) {
+	Map &map = World::get_world()->map;
+	int col = 0, row = 0;
+	if (!map.world_to_cell(glm::vec3(from, 0.0f), col, row)) return false;
+	int const col_steps[] = {3, 2, 4, 1, 5, -1, -2, -3};
+	int const row_steps[] = {0, -1, 1, -2, 2};
+	for (int dr : row_steps) {
+		for (int dc : col_steps) {
+			if (!map.is_walkable(col + dc, row + dr)) continue;
+			spot = glm::vec2(map.cell_center(col + dc, row + dr));
+			return true;
+		}
+	}
+	return false;
+}
+
+// Tutorial summary buttons, in the title screen's ui space (y from -1 to 1, x scaled by aspect).
+const glm::vec2 kPracticePlayCenter(-0.40f, 0.62f);
+const glm::vec2 kPracticeTitleCenter(0.40f, 0.62f);
+const glm::vec2 kPracticeButtonHalf(0.32f, 0.062f);
+
+glm::mat4 clip_from_ui(glm::uvec2 window) {
+	float aspect = float(window.x) / float(window.y);
+	return glm::mat4(
+		1.0f / aspect, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
 	);
 }
 
@@ -742,16 +787,19 @@ void PlayMode::advance_practice() {
 
 bool PlayMode::practice_button(glm::vec2 cursor, bool &start_game) const {
 	if (!practice_ || lesson_ < 4 || window_size.x == 0 || window_size.y == 0) return false;
+	float aspect = float(window_size.x) / float(window_size.y);
+	glm::vec2 ui(
+		(cursor.x / float(window_size.x) * 2.0f - 1.0f) * aspect,
+		1.0f - cursor.y / float(window_size.y) * 2.0f
+	);
 	struct Choice { glm::vec2 center; bool start; };
-	Choice choices[2] = {
-		{glm::vec2(-0.28f, 0.62f), true},
-		{glm::vec2(0.28f, 0.62f), false},
+	Choice const choices[2] = {
+		{kPracticePlayCenter, true},
+		{kPracticeTitleCenter, false},
 	};
-	glm::vec2 half(0.20f, 0.065f);
-	for (Choice choice : choices) {
-		glm::vec2 at = window_from_clip(choice.center, window_size);
-		glm::vec2 span(half.x * float(window_size.x), half.y * float(window_size.y));
-		if (std::abs(cursor.x - at.x) <= span.x && std::abs(cursor.y - at.y) <= span.y) {
+	for (Choice const &choice : choices) {
+		glm::vec2 d = glm::abs(ui - choice.center);
+		if (d.x <= kPracticeButtonHalf.x && d.y <= kPracticeButtonHalf.y) {
 			start_game = choice.start;
 			return true;
 		}
@@ -777,14 +825,17 @@ void PlayMode::draw_practice_hints(glm::mat4 const &clip) {
 	float pulse = 0.5f + 0.5f * std::sin(time_ * 4.0f);
 	glm::u8vec4 ink(255, 214, 90, (uint8_t)std::lround(140.0f + 80.0f * pulse));
 
-	if (lesson_ == 1 || lesson_ == 2) {
-		std::shared_ptr< Troop > fruit;
-		for (auto const &troop : World::get_world()->troops) {
-			if (troop && !troop->is_dead() && troop->get_team() == Team::BLUE) { fruit = troop; break; }
+	bool reselect = needs_reselect(lesson_);
+	if (lesson_ == 1 || lesson_ == 2 || reselect) {
+		std::shared_ptr< Troop > fruit = first_named("CherryBrawler", Team::BLUE);
+		if (!fruit) {
+			for (auto const &troop : World::get_world()->troops) {
+				if (troop && !troop->is_dead() && troop->get_team() == Team::BLUE) { fruit = troop; break; }
+			}
 		}
 		if (fruit) {
 			glm::vec2 at = fruit->get_position();
-			if (lesson_ == 1) {
+			if (lesson_ == 1 || reselect) {
 				float reach = glm::mix(0.35f, 1.5f, pulse);
 				rect(at - glm::vec2(reach), at + glm::vec2(reach), glm::u8vec4(255, 214, 90, 50));
 				float t = 0.08f;
@@ -793,17 +844,12 @@ void PlayMode::draw_practice_hints(glm::mat4 const &clip) {
 				rect(at + glm::vec2(-reach, -reach), at + glm::vec2(-reach + t, reach), ink);
 				rect(at + glm::vec2(reach - t, -reach), at + glm::vec2(reach, reach), ink);
 			} else {
-				Map &map = World::get_world()->map;
-				int col = 0, row = 0;
-				if (map.world_to_cell(glm::vec3(at, 0.0f), col, row)) {
-					int dest = std::min(col + 3, map.cols() - 1);
-					if (map.is_walkable(dest, row)) {
-						glm::vec2 flag(map.cell_center(dest, row));
-						rect(flag + glm::vec2(-0.08f, -0.7f), flag + glm::vec2(0.08f, 0.55f), ink);
-						verts.push_back({glm::vec3(flag.x, flag.y + 0.85f, 0.0f), ink});
-						verts.push_back({glm::vec3(flag.x + 0.7f, flag.y + 0.55f, 0.0f), ink});
-						verts.push_back({glm::vec3(flag.x, flag.y + 0.25f, 0.0f), ink});
-					}
+				glm::vec2 flag;
+				if (flag_spot(at, flag)) {
+					rect(flag + glm::vec2(-0.08f, -0.7f), flag + glm::vec2(0.08f, 0.55f), ink);
+					verts.push_back({glm::vec3(flag.x, flag.y + 0.85f, 0.0f), ink});
+					verts.push_back({glm::vec3(flag.x + 0.7f, flag.y + 0.55f, 0.0f), ink});
+					verts.push_back({glm::vec3(flag.x, flag.y + 0.25f, 0.0f), ink});
 				}
 			}
 		}
@@ -859,7 +905,7 @@ void PlayMode::draw_practice_banner() {
 		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
 		verts.push_back({glm::vec3(mn.x, mx.y, 0.0f), color});
 	};
-	std::string prompt = practice_prompt(lesson_);
+	std::string prompt = needs_reselect(lesson_) ? "Select your cherry first: drag a box around it." : practice_prompt(lesson_);
 	float prompt_advance = 0.0f;
 	ui_font->layout(prompt, &prompt_advance);
 	float prompt_h = 0.05f;
@@ -870,10 +916,6 @@ void PlayMode::draw_practice_banner() {
 	float prompt_cy = 0.90f;
 	float half_w = std::min(0.5f * prompt_w + pad_x, 0.72f);
 	rect(glm::vec2(-half_w, prompt_cy - prompt_h * 0.5f - pad_y), glm::vec2(half_w, prompt_cy + prompt_h * 0.5f + pad_y), glm::u8vec4(236, 222, 186, 230));
-	if (lesson_ >= 4) {
-		rect(glm::vec2(-0.48f, 0.555f), glm::vec2(-0.08f, 0.685f), glm::u8vec4(196, 58, 52, 255));
-		rect(glm::vec2(0.08f, 0.555f), glm::vec2(0.48f, 0.685f), glm::u8vec4(214, 194, 150, 255));
-	}
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
@@ -902,14 +944,34 @@ void PlayMode::draw_practice_banner() {
 		TextRenderer renderer(glm::mat4(1.0f));
 		auto [anchor, x_axis, y_axis] = place_text(prompt, glm::vec2(0.0f, prompt_cy), prompt_h);
 		renderer.draw_text(*ui_font, prompt, anchor, x_axis, y_axis, glm::u8vec4(27, 16, 18, 255));
-		if (lesson_ >= 4) {
-			auto label = [&](std::string const &text, glm::vec2 center, glm::u8vec4 color) {
-				auto [at, sx, sy] = place_text(text, center, 0.055f);
-				renderer.draw_text(*ui_font, text, at, sx, sy, color);
-			};
-			label("PLAY", glm::vec2(-0.28f, 0.62f), glm::u8vec4(255, 236, 196, 255));
-			label("TITLE", glm::vec2(0.28f, 0.62f), glm::u8vec4(27, 16, 18, 255));
-		}
+	}
+
+	if (lesson_ >= 4) {
+		// Same buttons as the title screen: lift on hover, press down while held, bold labels.
+		auto lift = [&](int which) {
+			if (practice_hover_ != which) return glm::vec2(0.0f);
+			return practice_pressed_ == which ? glm::vec2(0.0f, -0.012f) : glm::vec2(0.0f, 0.012f);
+		};
+		UiDraw::Mesh buttons;
+		UiDraw::paint_button(buttons, kPracticePlayCenter, kPracticeButtonHalf, lift(0),
+			practice_hover_ == 0 ? UiDraw::kCherryLight : UiDraw::kCherry);
+		UiDraw::paint_button(buttons, kPracticeTitleCenter, kPracticeButtonHalf, lift(1),
+			practice_hover_ == 1 ? UiDraw::kPaperLight : UiDraw::kPaperShade);
+
+		glm::mat4 ui_to_clip = clip_from_ui(window_size);
+		glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+		glBufferData(GL_ARRAY_BUFFER, buttons.size() * sizeof(UiDraw::Vertex), buttons.data(), GL_DYNAMIC_DRAW);
+		glUseProgram(color_program->program);
+		glBindVertexArray(bar_vao_);
+		glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(ui_to_clip));
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)buttons.size());
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glUseProgram(0);
+
+		TextRenderer renderer(ui_to_clip);
+		UiDraw::draw_bold_text(renderer, *ui_font, "PLAY", kPracticePlayCenter + lift(0), 0.068f, 0.002f, UiDraw::kCream);
+		UiDraw::draw_bold_text(renderer, *ui_font, "TITLE", kPracticeTitleCenter + lift(1), 0.068f, 0.002f, UiDraw::kInk);
 	}
 }
 

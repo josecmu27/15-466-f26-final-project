@@ -83,7 +83,7 @@ void Brawler::update(float elapsed)
         }
     } else{
         hit_cycle = -1;
-        move_to_target(elapsed);
+        if (order.type != OrderType::Hold) move_to_target(elapsed);
     }
   
 

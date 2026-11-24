@@ -5,6 +5,7 @@
 #include "ColorTextureProgram.hpp"
 #include "GameAudio.hpp"
 #include "GameFonts.hpp"
+#include "Settings.hpp"
 #include "TextRenderer.hpp"
 #include "data_path.hpp"
 #include "gl_errors.hpp"
@@ -13,92 +14,68 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <string>
+
+using namespace UiDraw;
 
 namespace {
 
-constexpr float kTau = 6.28318530718f;
-
-const glm::u8vec4 kInk(27, 16, 18, 255);
-const glm::u8vec4 kPaperShade(214, 194, 150, 255);
-const glm::u8vec4 kPaperLight(228, 212, 172, 255);
-const glm::u8vec4 kCherry(196, 58, 52, 255);
-const glm::u8vec4 kCherryLight(222, 92, 70, 255);
-const glm::u8vec4 kCream(255, 236, 206, 255);
-
 // Buttons sit low, under the two lineups (all the same size):
-const glm::vec2 kLevel1Center(-0.6f, -0.34f);
-const glm::vec2 kLevel2Center(-0.6f, -0.52f);
-const glm::vec2 kHowCenter(-0.6f, -0.70f);
-const glm::vec2 kQuitCenter(-0.6f, -0.88f);
-const glm::vec2 kButtonHalf(0.40f, 0.072f);
+const glm::vec2 kLevel1Center(-0.6f, -0.32f);
+const glm::vec2 kLevel2Center(-0.6f, -0.47f);
+const glm::vec2 kHowCenter(-0.6f, -0.62f);
+const glm::vec2 kSettingsCenter(-0.6f, -0.77f);
+const glm::vec2 kQuitCenter(-0.6f, -0.92f);
+const glm::vec2 kButtonHalf(0.40f, 0.062f);
 
-bool inside_button(glm::vec2 ui, glm::vec2 center) {
+bool inside_button(glm::vec2 ui, glm::vec2 center, glm::vec2 half = kButtonHalf) {
 	glm::vec2 d = glm::abs(ui - center);
-	return d.x <= kButtonHalf.x && d.y <= kButtonHalf.y;
+	return d.x <= half.x && d.y <= half.y;
 }
 
-using Mesh = std::vector< TitleMode::Vertex >;
+// Settings panel: one row per option, label on the left and its control on the right.
+const float kRowY[5] = {0.34f, 0.17f, 0.0f, -0.17f, -0.34f};
+const float kLabelLeft = -0.80f;
+const float kMinusX = 0.22f;
+const float kValueX = 0.46f;
+const float kPlusX = 0.70f;
+const glm::vec2 kSmallHalf(0.055f, 0.055f);
+const glm::vec2 kToggleHalf(0.25f, 0.055f);
+const glm::vec2 kBackCenter(0.0f, -0.60f);
 
-void tri(Mesh &dst, glm::vec2 a, glm::vec2 b, glm::vec2 c, glm::u8vec4 color) {
-	dst.push_back(TitleMode::Vertex{glm::vec3(a, 0.0f), color});
-	dst.push_back(TitleMode::Vertex{glm::vec3(b, 0.0f), color});
-	dst.push_back(TitleMode::Vertex{glm::vec3(c, 0.0f), color});
+struct ControlRect {
+	TitleMode::Control id;
+	glm::vec2 center;
+	glm::vec2 half;
+};
+
+std::array< ControlRect, 8 > settings_controls() {
+	using C = TitleMode::Control;
+	return {{
+		{C::MusicDown, glm::vec2(kMinusX, kRowY[0]), kSmallHalf},
+		{C::MusicUp, glm::vec2(kPlusX, kRowY[0]), kSmallHalf},
+		{C::SfxDown, glm::vec2(kMinusX, kRowY[1]), kSmallHalf},
+		{C::SfxUp, glm::vec2(kPlusX, kRowY[1]), kSmallHalf},
+		{C::Fullscreen, glm::vec2(kValueX, kRowY[2]), kToggleHalf},
+		{C::Film, glm::vec2(kValueX, kRowY[3]), kToggleHalf},
+		{C::Speed, glm::vec2(kValueX, kRowY[4]), kToggleHalf},
+		{C::Back, kBackCenter, kButtonHalf},
+	}};
 }
 
-void paint_polygon(Mesh &dst, std::vector< glm::vec2 > const &pts, glm::u8vec4 color) {
-	if (pts.size() < 3) return;
-	glm::vec2 c(0.0f);
-	for (glm::vec2 p : pts) c += p;
-	c /= float(pts.size());
-	for (size_t i = 0; i < pts.size(); ++i) {
-		tri(dst, c, pts[i], pts[(i + 1) % pts.size()], color);
-	}
+bool control_is_on(TitleMode::Control control) {
+	using C = TitleMode::Control;
+	if (control == C::Fullscreen) return Settings::fullscreen;
+	if (control == C::Film) return Settings::film_effect;
+	if (control == C::Speed) return Settings::game_speed > 1.5f;
+	return false;
 }
 
-// Thick outline: one quad per segment plus a small fan at each joint so corners stay round.
-void paint_outline(Mesh &dst, std::vector< glm::vec2 > const &pts, float width, glm::u8vec4 color, bool closed) {
-	size_t n = pts.size();
-	if (n < 2) return;
-	float r = 0.5f * width;
-	size_t segs = closed ? n : n - 1;
-	for (size_t i = 0; i < segs; ++i) {
-		glm::vec2 a = pts[i];
-		glm::vec2 b = pts[(i + 1) % n];
-		glm::vec2 d = b - a;
-		float len = glm::length(d);
-		if (len < 1e-6f) continue;
-		glm::vec2 side = glm::vec2(-d.y, d.x) / len * r;
-		tri(dst, a - side, b - side, b + side, color);
-		tri(dst, a - side, b + side, a + side, color);
-	}
-	for (size_t i = 0; i < n; ++i) {
-		for (int k = 0; k < 6; ++k) {
-			float a0 = float(k) / 6.0f * kTau;
-			float a1 = float(k + 1) / 6.0f * kTau;
-			tri(dst, pts[i], pts[i] + r * glm::vec2(std::cos(a0), std::sin(a0)), pts[i] + r * glm::vec2(std::cos(a1), std::sin(a1)), color);
-		}
-	}
-}
-
-std::vector< glm::vec2 > round_rect(glm::vec2 mn, glm::vec2 mx, float rad, int segs) {
-	rad = std::min(rad, 0.5f * std::min(mx.x - mn.x, mx.y - mn.y));
-	glm::vec2 centers[4] = {
-		glm::vec2(mx.x - rad, mn.y + rad),
-		glm::vec2(mx.x - rad, mx.y - rad),
-		glm::vec2(mn.x + rad, mx.y - rad),
-		glm::vec2(mn.x + rad, mn.y + rad),
-	};
-	std::vector< glm::vec2 > pts;
-	for (int c = 0; c < 4; ++c) {
-		float a0 = -kTau / 4.0f + float(c) * kTau / 4.0f;
-		for (int i = 0; i <= segs; ++i) {
-			float a = a0 + float(i) / float(segs) * kTau / 4.0f;
-			pts.push_back(centers[c] + rad * glm::vec2(std::cos(a), std::sin(a)));
-		}
-	}
-	return pts;
+std::string percent(float value) {
+	return std::to_string(int(std::lround(value * 100.0f))) + "%";
 }
 
 } // namespace
@@ -139,33 +116,6 @@ TitleMode::Portrait TitleMode::load_portrait(std::string const &file) {
 	glBindTexture(GL_TEXTURE_2D, 0);
 	return portrait;
 }
-
-namespace {
-
-// Width of `text` in units of its height.
-float text_width(Font const &font, std::string const &text) {
-	float advance = 0.0f;
-	font.layout(text, &advance);
-	return advance / float(font.pixel_height);
-}
-
-// The font has a single regular weight; stamping it in a small disc makes it read as bold.
-void draw_bold_text(TextRenderer &renderer, Font const &font, std::string const &text, glm::vec2 center, float height, float weight, glm::u8vec4 color) {
-	glm::vec2 anchor = center - glm::vec2(0.5f * text_width(font, text) * height, kFontCapCenter * height);
-	float scale = height / float(font.pixel_height);
-	int rings = 3;
-	for (int ring = 0; ring <= rings; ++ring) {
-		float r = weight * float(ring) / float(rings);
-		int count = (ring == 0) ? 1 : 6 * ring;
-		for (int i = 0; i < count; ++i) {
-			float a = float(i) / float(count) * kTau;
-			glm::vec2 at = anchor + r * glm::vec2(std::cos(a), std::sin(a));
-			renderer.draw_text(font, text, glm::vec3(at, 0.0f), glm::vec3(scale, 0.0f, 0.0f), glm::vec3(0.0f, scale, 0.0f), color);
-		}
-	}
-}
-
-} // namespace
 
 TitleMode::TitleMode() {
 	int w = 0, h = 0;
@@ -233,11 +183,47 @@ glm::vec2 TitleMode::mouse_ui() const {
 }
 
 TitleMode::Button TitleMode::button_at(glm::vec2 ui) const {
+	if (settings_open_) return Button::None;
 	if (inside_button(ui, kLevel1Center)) return Button::Level1;
 	if (inside_button(ui, kLevel2Center)) return Button::Level2;
 	if (inside_button(ui, kHowCenter)) return Button::How;
+	if (inside_button(ui, kSettingsCenter)) return Button::Settings;
 	if (inside_button(ui, kQuitCenter)) return Button::Quit;
 	return Button::None;
+}
+
+TitleMode::Control TitleMode::control_at(glm::vec2 ui) const {
+	if (!settings_open_) return Control::None;
+	for (ControlRect const &rect : settings_controls()) {
+		if (inside_button(ui, rect.center, rect.half)) return rect.id;
+	}
+	return Control::None;
+}
+
+void TitleMode::apply(Control control) {
+	// Volumes move in 10% steps; rounding keeps repeated steps from drifting off the grid.
+	auto step = [](float &value, float delta) {
+		value = std::clamp(std::round((value + delta) * 10.0f) / 10.0f, 0.0f, 1.0f);
+	};
+	switch (control) {
+		case Control::MusicDown: step(Settings::music_volume, -0.1f); GameAudio::refresh_music_volume(); break;
+		case Control::MusicUp: step(Settings::music_volume, 0.1f); GameAudio::refresh_music_volume(); break;
+		case Control::SfxDown: step(Settings::sfx_volume, -0.1f); break;
+		case Control::SfxUp: step(Settings::sfx_volume, 0.1f); break;
+		case Control::Fullscreen:
+			Settings::fullscreen = !Settings::fullscreen;
+			SDL_SetWindowFullscreen(Mode::window, Settings::fullscreen);
+			break;
+		case Control::Film: Settings::film_effect = !Settings::film_effect; break;
+		case Control::Speed: Settings::game_speed = (Settings::game_speed > 1.5f ? 1.0f : 2.0f); break;
+		case Control::Back:
+			settings_open_ = false;
+			control_hover_ = Control::None;
+			break;
+		case Control::None: return;
+	}
+	// Played after the change, so adjusting the effects volume previews the new level.
+	GameAudio::play(GameAudio::Sfx::UiClick);
 }
 
 void TitleMode::quit() {
@@ -256,11 +242,19 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse_ = glm::vec2(evt.button.x, evt.button.y);
 		pressing_ = button_at(mouse_ui());
+		control_pressing_ = control_at(mouse_ui());
 		return true;
 	}
 	// Act on release so PlayMode never sees the click that started it.
 	if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP && evt.button.button == SDL_BUTTON_LEFT) {
 		mouse_ = glm::vec2(evt.button.x, evt.button.y);
+		if (settings_open_) {
+			Control released = control_at(mouse_ui());
+			if (released != Control::None && released == control_pressing_) apply(released);
+			control_pressing_ = Control::None;
+			pressing_ = Button::None;
+			return true;
+		}
 		Button released = button_at(mouse_ui());
 		if (released != Button::None && released == pressing_) {
 			if (released == Button::Level1) {
@@ -274,6 +268,10 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 			} else if (released == Button::How) {
 				GameAudio::play(GameAudio::Sfx::UiConfirm);
 				how_requested_ = true;
+			} else if (released == Button::Settings) {
+				GameAudio::play(GameAudio::Sfx::UiConfirm);
+				settings_open_ = true;
+				hover_ = Button::None;
 			} else {
 				GameAudio::play(GameAudio::Sfx::UiClick);
 				quit();
@@ -283,6 +281,11 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 		return true;
 	}
 	if (evt.type == SDL_EVENT_KEY_DOWN) {
+		if (settings_open_) {
+			// Escape backs out of the panel instead of quitting; other keys mustn't start the game behind it.
+			if (evt.key.key == SDLK_ESCAPE) apply(Control::Back);
+			return true;
+		}
 		if (evt.key.key == SDLK_RETURN || evt.key.key == SDLK_KP_ENTER || evt.key.key == SDLK_SPACE) {
 			GameAudio::play(GameAudio::Sfx::UiConfirm);
 			start_requested_ = true;
@@ -302,6 +305,9 @@ void TitleMode::update(float elapsed) {
 	Button was_hovering = hover_;
 	hover_ = button_at(mouse_ui());
 	if (hover_ != was_hovering && hover_ != Button::None) GameAudio::play(GameAudio::Sfx::UiHover);
+	Control was_control = control_hover_;
+	control_hover_ = control_at(mouse_ui());
+	if (control_hover_ != was_control && control_hover_ != Control::None) GameAudio::play(GameAudio::Sfx::UiHover);
 
 	if (how_requested_) {
 		auto keep_alive = shared_from_this();
@@ -388,31 +394,83 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 		if (hover_ != button) return glm::vec2(0.0f);
 		return pressing_ == button ? glm::vec2(0.0f, -0.012f) : glm::vec2(0.0f, 0.012f);
 	};
-	Mesh controls;
-	{
+	if (!settings_open_) {
+		Mesh controls;
 		// A dark plate so the labels stay readable over the fighters' feet.
-		paint_polygon(controls, round_rect(glm::vec2(-0.52f - 0.6f, -1.05f), glm::vec2(0.52f - 0.6f, -0.2f), 0.08f, 4), glm::u8vec4(16, 10, 12, 215));
-		auto paint_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover) {
-			glm::vec2 lift = button_lift(button);
-			auto body = round_rect(center - kButtonHalf + lift, center + kButtonHalf + lift, 0.05f, 4);
-			auto shadow = round_rect(center - kButtonHalf + glm::vec2(0.0f, -0.02f), center + kButtonHalf + glm::vec2(0.0f, -0.02f), 0.05f, 4);
-			paint_polygon(controls, shadow, kInk);
-			paint_polygon(controls, body, hover_ == button ? fill_hover : fill);
-			paint_outline(controls, body, 0.016f, kInk, true);
+		paint_polygon(controls, round_rect(glm::vec2(-0.52f - 0.6f, -1.04f), glm::vec2(0.52f - 0.6f, -0.23f), 0.08f, 4), glm::u8vec4(16, 10, 12, 215));
+		auto menu_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover) {
+			paint_button(controls, center, kButtonHalf, button_lift(button), hover_ == button ? fill_hover : fill);
 		};
-		paint_button(Button::Level1, kLevel1Center, kCherry, kCherryLight);
-		paint_button(Button::Level2, kLevel2Center, kCherry, kCherryLight);
-		paint_button(Button::How, kHowCenter, kPaperShade, kPaperLight);
-		paint_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight);
-	}
-	draw_color_mesh(controls, clip_from_ui);
+		menu_button(Button::Level1, kLevel1Center, kCherry, kCherryLight);
+		menu_button(Button::Level2, kLevel2Center, kCherry, kCherryLight);
+		menu_button(Button::How, kHowCenter, kPaperShade, kPaperLight);
+		menu_button(Button::Settings, kSettingsCenter, kPaperShade, kPaperLight);
+		menu_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight);
+		draw_color_mesh(controls, clip_from_ui);
 
-	{
 		TextRenderer text(clip_from_ui);
 		draw_bold_text(text, *ui_font, "LEVEL 1", kLevel1Center + button_lift(Button::Level1), 0.075f, 0.002f, kCream);
 		draw_bold_text(text, *ui_font, "LEVEL 2", kLevel2Center + button_lift(Button::Level2), 0.075f, 0.002f, kCream);
-		draw_bold_text(text, *ui_font, "HOW TO PLAY", kHowCenter + button_lift(Button::How), 0.062f, 0.002f, kInk);
-		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.075f, 0.002f, kInk);
+		draw_bold_text(text, *ui_font, "HOW TO PLAY", kHowCenter + button_lift(Button::How), 0.056f, 0.002f, kInk);
+		draw_bold_text(text, *ui_font, "SETTINGS", kSettingsCenter + button_lift(Button::Settings), 0.056f, 0.002f, kInk);
+		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.068f, 0.002f, kInk);
+	} else {
+		auto control_lift = [&](Control control) {
+			if (control_hover_ != control) return glm::vec2(0.0f);
+			return control_pressing_ == control ? glm::vec2(0.0f, -0.01f) : glm::vec2(0.0f, 0.01f);
+		};
+
+		Mesh panel;
+		// Dim the poster, then a paper card for the options.
+		glm::u8vec4 dim(10, 6, 8, 170);
+		tri(panel, glm::vec2(-asp, -1.0f), glm::vec2(asp, -1.0f), glm::vec2(asp, 1.0f), dim);
+		tri(panel, glm::vec2(-asp, -1.0f), glm::vec2(asp, 1.0f), glm::vec2(-asp, 1.0f), dim);
+		float card_hw = std::min(asp - 0.06f, 0.98f);
+		glm::vec2 card_min(-card_hw, -0.80f), card_max(card_hw, 0.80f);
+		paint_polygon(panel, round_rect(card_min + glm::vec2(0.02f, -0.02f), card_max + glm::vec2(0.02f, -0.02f), 0.07f, 4), kInk);
+		auto card = round_rect(card_min, card_max, 0.07f, 4);
+		paint_polygon(panel, card, kPaperLight);
+		paint_outline(panel, card, 0.018f, kInk, true);
+
+		for (ControlRect const &rect : settings_controls()) {
+			bool on = control_is_on(rect.id);
+			glm::vec2 lift = control_lift(rect.id);
+			auto body = round_rect(rect.center - rect.half + lift, rect.center + rect.half + lift, 0.035f, 3);
+			auto shadow = round_rect(rect.center - rect.half + glm::vec2(0.0f, -0.016f), rect.center + rect.half + glm::vec2(0.0f, -0.016f), 0.035f, 3);
+			paint_polygon(panel, shadow, kInk);
+			glm::u8vec4 fill = on ? kCherry : kPaperShade;
+			glm::u8vec4 fill_hover = on ? kCherryLight : kCream;
+			paint_polygon(panel, body, control_hover_ == rect.id ? fill_hover : fill);
+			paint_outline(panel, body, 0.012f, kInk, true);
+		}
+		draw_color_mesh(panel, clip_from_ui);
+
+		TextRenderer text(clip_from_ui);
+		draw_bold_text(text, *ui_font, "SETTINGS", glm::vec2(0.0f, 0.60f), 0.10f, 0.003f, kInk);
+
+		constexpr float LabelH = 0.055f;
+		char const *labels[5] = {"MUSIC VOLUME", "SOUND EFFECTS", "FULLSCREEN", "FILM EFFECT", "GAME SPEED"};
+		for (int row = 0; row < 5; ++row) {
+			float center_x = kLabelLeft + 0.5f * text_width(*ui_font, labels[row]) * LabelH;
+			draw_bold_text(text, *ui_font, labels[row], glm::vec2(center_x, kRowY[row]), LabelH, 0.0015f, kInk);
+		}
+
+		draw_bold_text(text, *ui_font, percent(Settings::music_volume), glm::vec2(kValueX, kRowY[0]), LabelH, 0.0015f, kInk);
+		draw_bold_text(text, *ui_font, percent(Settings::sfx_volume), glm::vec2(kValueX, kRowY[1]), LabelH, 0.0015f, kInk);
+
+		for (ControlRect const &rect : settings_controls()) {
+			glm::vec2 at = rect.center + control_lift(rect.id);
+			glm::u8vec4 ink = control_is_on(rect.id) ? kCream : kInk;
+			switch (rect.id) {
+				case Control::MusicDown: case Control::SfxDown: draw_bold_text(text, *ui_font, "-", at, 0.07f, 0.002f, ink); break;
+				case Control::MusicUp: case Control::SfxUp: draw_bold_text(text, *ui_font, "+", at, 0.07f, 0.002f, ink); break;
+				case Control::Fullscreen: draw_bold_text(text, *ui_font, Settings::fullscreen ? "ON" : "OFF", at, LabelH, 0.0015f, ink); break;
+				case Control::Film: draw_bold_text(text, *ui_font, Settings::film_effect ? "ON" : "OFF", at, LabelH, 0.0015f, ink); break;
+				case Control::Speed: draw_bold_text(text, *ui_font, Settings::game_speed > 1.5f ? "2x" : "1x", at, LabelH, 0.0015f, ink); break;
+				case Control::Back: draw_bold_text(text, *ui_font, "BACK", at, 0.062f, 0.002f, ink); break;
+				case Control::None: break;
+			}
+		}
 	}
 
 	glDisable(GL_BLEND);

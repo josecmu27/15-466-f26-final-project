@@ -27,6 +27,8 @@ void play_at(Sfx sfx, glm::vec2 world_position);
 void play_music(Music music);
 // Scales the current music's volume (1.0 = normal), e.g. to duck it while paused.
 void set_music_level(float level);
+// Re-applies Settings::music_volume to the music that is already playing.
+void refresh_music_volume();
 void stop_music();
 
 // Stops the music and plays a one-shot end-of-game tune.

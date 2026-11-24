@@ -89,7 +89,8 @@ void Ranged::attack()
 		projectile_dir * get_data_asset()->projectile_speed,
 		data->attack_damage,
 		get_data_asset()->projectile_radius,
-        team
+        team,
+        data->attack_range * 1.5f // some slack so a target walking away can still be hit
 	));
 }
 
