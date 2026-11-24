@@ -10,7 +10,7 @@ enum class Sfx {
 	UiHover, UiConfirm, UiClick,
 	Place, PlaceFail, SelectUnits, Order,
 	Pause, Resume,
-	Hit, BasketHit, BasketBreak,
+	Hit, TreeHit, TreeBreak,
 	BrawlerAttack, RangedAttack, HealerAttack,
 	Pickup,
 	Count

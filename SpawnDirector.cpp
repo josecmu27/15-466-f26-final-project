@@ -133,7 +133,7 @@ void SpawnDirector::update_intensity(float elapsed) {
     World* world = World::get_world();
     if (!world) return;
 
-    glm::vec2 player_base_position = world->map.base_center(false); // player's basket position (still might change the 'basket' to another kinda of base)
+    glm::vec2 player_base_position = world->map.base_center(false); // player's tree position (still might change the 'tree' to another kinda of base)
     glm::vec2 director_base_position = world->map.base_center(true);
     float arena_length = glm::distance(player_base_position, director_base_position);
 
@@ -152,13 +152,13 @@ void SpawnDirector::update_intensity(float elapsed) {
     for (auto const& troop : world->troops) {
         if (!troop) continue;
 
-        if (troop->get_team() == Team::BASKET) {
+        if (troop->get_team() == Team::TREE) {
             int health = troop->get_health();
             if (health < previous_player_base_health) {
                 intensity += float(previous_player_base_health - health) * director_config.player_base_damage_weight;
                 previous_player_base_health = health;
             }
-        } else if (troop->get_team() == Team::ENEMY_BASKET) {
+        } else if (troop->get_team() == Team::ENEMY_TREE) {
             int health = troop->get_health();
             if (health < previous_director_base_health) {
                 intensity += float(previous_director_base_health - health) * director_config.director_base_damage_weight;

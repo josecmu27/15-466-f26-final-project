@@ -17,8 +17,8 @@ Kenney (www.kenney.nl), CC0 -- https://creativecommons.org/publicdomain/zero/1.0
     resume.wav        <- maximize_005.ogg
   "Impact Sounds" pack:
     hit_0..4.wav        <- impactSoft_medium_000..004.ogg
-    basket_hit_0..2.wav <- impactWood_light_000..002.ogg
-    basket_break.wav    <- impactWood_heavy_000.ogg
+    tree_hit_0..2.wav <- impactWood_light_000..002.ogg
+    tree_break.wav    <- impactWood_heavy_000.ogg
 
 OpenGameArt.org, CC0:
   bgm_title.opus      <- "Flowerbed Fields [Loop]" by Zane Little Music

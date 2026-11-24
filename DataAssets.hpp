@@ -9,7 +9,7 @@
 struct DataAssets {
 	BrawlerDataAsset cherry;
 	RangedDataAsset banana;
-    RangedDataAsset basket;
+    RangedDataAsset tree;
 	HealerDataAsset pineapple;
 	FlyerDataAsset orange;
 	CollectorDataAsset blueberry;
@@ -40,15 +40,15 @@ struct DataAssets {
 		banana.can_hit_flying = true;
 		banana.projectile_radius = 0.5f;
 
-        basket.name = "Basket";
-		basket.label = "Basket";
-		basket.description = "Your base. It stays put and only fights at arm's length.\n1000 health. You lose if it is destroyed.";
-		basket.max_health = 1000;
-		basket.resource_cost = 10;
-		basket.attack_damage = 25;
-		basket.attack_range = 1.0f;
-		basket.attack_rate = 1.5f;
-		basket.movement_speed = 0.0f;
+        tree.name = "Tree";
+		tree.label = "Tree";
+		tree.description = "Your base. It stays put and only fights at arm's length.\n1000 health. You lose if it is destroyed.";
+		tree.max_health = 1000;
+		tree.resource_cost = 10;
+		tree.attack_damage = 25;
+		tree.attack_range = 1.0f;
+		tree.attack_rate = 1.5f;
+		tree.movement_speed = 0.0f;
 		
 		pineapple.name = "PineappleHealer";
 		pineapple.label = "Pineapple";

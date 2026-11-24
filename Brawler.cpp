@@ -6,13 +6,13 @@
 
 namespace {
 
-bool is_basket(Team team) {
-	return team == Team::BASKET || team == Team::ENEMY_BASKET;
+bool is_tree(Team team) {
+	return team == Team::TREE || team == Team::ENEMY_TREE;
 }
 
-void basket_rect(Team team, glm::vec2 &mn, glm::vec2 &mx) {
+void tree_rect(Team team, glm::vec2 &mn, glm::vec2 &mx) {
 	Map const &map = World::get_world()->map;
-	if (team == Team::BASKET) {
+	if (team == Team::TREE) {
 		mn = map.friendly_base_min();
 		mx = map.friendly_base_max();
 	} else {
@@ -21,19 +21,19 @@ void basket_rect(Team team, glm::vec2 &mn, glm::vec2 &mx) {
 	}
 }
 
-// Distance to a basket is distance to its footprint, so a unit on the near edge is in range.
+// Distance to a tree is distance to its footprint, so a unit on the near edge is in range.
 float distance_to(glm::vec2 from, Troop const &troop) {
-	if (!is_basket(troop.get_team())) return glm::distance(from, troop.get_position());
+	if (!is_tree(troop.get_team())) return glm::distance(from, troop.get_position());
 	glm::vec2 mn, mx;
-	basket_rect(troop.get_team(), mn, mx);
+	tree_rect(troop.get_team(), mn, mx);
 	return glm::distance(from, glm::clamp(from, mn, mx));
 }
 
 // A point just inside the near face, so pathfinding heads for the side the unit is on.
 glm::vec2 approach_point(glm::vec2 from, Troop const &troop) {
-	if (!is_basket(troop.get_team())) return troop.get_position();
+	if (!is_tree(troop.get_team())) return troop.get_position();
 	glm::vec2 mn, mx;
-	basket_rect(troop.get_team(), mn, mx);
+	tree_rect(troop.get_team(), mn, mx);
 	glm::vec2 q = glm::clamp(from, mn, mx);
 	glm::vec2 inward = 0.5f * (mn + mx) - q;
 	float len = glm::length(inward);
@@ -45,7 +45,7 @@ glm::vec2 approach_point(glm::vec2 from, Troop const &troop) {
 
 void Brawler::update(float elapsed)
 {
-    if (team == Team::BASKET || team == Team::ENEMY_BASKET) return;
+    if (team == Team::TREE || team == Team::ENEMY_TREE) return;
 
     auto ordered = order.attack_target.lock();
     if (order.type == OrderType::Attack && (!ordered || ordered->is_dead())) cancel_order();
@@ -102,7 +102,7 @@ void Brawler::attack()
     if (!target || !data) return;
 
     target->take_damage(data->attack_damage);
-    GameAudio::play_at(is_basket(target->get_team()) ? GameAudio::Sfx::BasketHit : GameAudio::Sfx::BrawlerAttack, position);
+    GameAudio::play_at(is_tree(target->get_team()) ? GameAudio::Sfx::TreeHit : GameAudio::Sfx::BrawlerAttack, position);
 
     if (target->is_dead())
     {
@@ -128,7 +128,7 @@ void Brawler::walk_toward(float elapsed, glm::vec2 goal) {
     std::vector<glm::vec2> others;
     for (auto const &troop : World::get_world()->troops) {
         if (troop.get() == this || troop->is_dead()) continue;
-        if (is_basket(troop->get_team())) continue;
+        if (is_tree(troop->get_team())) continue;
         others.push_back(troop->get_position());
     }
 
@@ -149,8 +149,8 @@ void Brawler::determine_target()
     for (auto const &troop : World::get_world()->troops){
         if (!troop || troop.get() == this) continue;
         if (troop->get_team() == team || troop->is_dead()) continue;
-        if (troop->get_team() == Team::BASKET && team == Team::BLUE) continue;
-        if (troop->get_team() == Team::ENEMY_BASKET && team == Team::RED) continue;
+        if (troop->get_team() == Team::TREE && team == Team::BLUE) continue;
+        if (troop->get_team() == Team::ENEMY_TREE && team == Team::RED) continue;
         if (troop->get_data_asset()->is_flying) continue;
 
         float distance_to_troop = glm::distance(troop->get_position(), position);

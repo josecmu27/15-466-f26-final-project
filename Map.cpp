@@ -469,9 +469,9 @@ void Map::build_from_ascii(std::string const &ascii) {
 void Map::load_base_sprite() {
 	glm::uvec2 size(0);
 	std::vector< glm::u8vec4 > pixels;
-	load_png(data_path("basket.png"), &size, &pixels, LowerLeftOrigin);
+	load_png(data_path("tree.png"), &size, &pixels, LowerLeftOrigin);
 	if (size.x == 0 || size.y == 0 || pixels.empty()) {
-		throw std::runtime_error("Map: basket.png is empty");
+		throw std::runtime_error("Map: tree.png is empty");
 	}
 
 	int min_x = (int)size.x;
@@ -488,7 +488,7 @@ void Map::load_base_sprite() {
 		}
 	}
 	if (max_x < min_x || max_y < min_y) {
-		throw std::runtime_error("Map: basket.png has no visible pixels");
+		throw std::runtime_error("Map: tree.png has no visible pixels");
 	}
 
 	base_uv_min_ = glm::vec2(float(min_x) / float(size.x), float(min_y) / float(size.y));

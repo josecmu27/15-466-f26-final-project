@@ -13,11 +13,11 @@ class Troop;
 enum Team {
     BLUE, // Player
     RED, // Enemy
-    BASKET, // Player's Base
-    ENEMY_BASKET // Enemy's Base
+    TREE, // Player's Base
+    ENEMY_TREE // Enemy's Base
 };
 
-/* troop selection (note that the baskets are not included)*/
+/* troop selection (note that the trees are not included)*/
 enum TroopType {
 	CHERRY_BRAWLER, 
 	BANANA_RANGED,

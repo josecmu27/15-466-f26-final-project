@@ -70,9 +70,9 @@ struct PlayMode : Mode {
 	// Freezes the battle; troops can still be placed while paused.
 	bool paused_ = false;
 
-	// World removes a basket when its health runs out.
-	std::weak_ptr< Troop > basket_;
-	std::weak_ptr< Troop > enemy_basket_;
+	// World removes a tree when its health runs out.
+	std::weak_ptr< Troop > tree_;
+	std::weak_ptr< Troop > enemy_tree_;
 	bool won_ = false;
 	bool lost_ = false;
 	bool restart_ = false;
@@ -109,6 +109,7 @@ struct PlayMode : Mode {
 
 	void advance_practice();
 	void spawn_practice_enemy();
+	void prepare_practice_gather();
 	void draw_practice_hints(glm::mat4 const &clip);
 	void draw_practice_banner();
 	bool practice_button(glm::vec2 cursor, bool &start_game) const;
@@ -123,11 +124,16 @@ struct PlayMode : Mode {
 
 	std::unique_ptr<SpawnDirector> spawn_director;
 
-	// Guided practice opened from the title screen. lesson_ 0..3 are the cherry tasks; 4 is the summary.
+	// Guided practice opened from the title screen.
+	// 0..3 are the cherry tasks, 4..5 are the blueberry gather, 6 is the summary.
 	bool practice_ = false;
 	int lesson_ = 0;
 	bool leave_practice_ = false;
 	bool start_real_ = false;
+	// Staged once when the gather lessons begin, so a delivered drop can raise the counter.
+	bool practice_gather_ready_ = false;
+	bool practice_saw_carry_ = false;
+	int practice_resources_while_carrying_ = 0;
 
 	char const *level_ascii;
 	// Summary buttons (0 = PLAY, 1 = TITLE, -1 = none), for the title screen's hover and press look.

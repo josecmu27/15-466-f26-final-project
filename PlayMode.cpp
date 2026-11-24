@@ -123,19 +123,19 @@ PlayMode::PlayMode(char const *level, bool practice) : practice_(practice) {
 	World::get_world()->clear();
 	World::get_world()->map.load(level_ascii);
 
-	glm::vec2 basket_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
-	auto basket = std::make_shared<Ranged>(basket_at, &player_data.basket, Team::BASKET);
+	glm::vec2 tree_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
+	auto tree = std::make_shared<Ranged>(tree_at, &player_data.tree, Team::TREE);
 
-	World::get_world()->troops.emplace_back(basket);
-	basket_ = basket;
+	World::get_world()->troops.emplace_back(tree);
+	tree_ = tree;
 
 	glm::vec2 enemy_at = 0.5f * (World::get_world()->map.enemy_base_min() + World::get_world()->map.enemy_base_max());
-	auto enemy_basket = std::make_shared<Ranged>(enemy_at, &player_data.basket, Team::ENEMY_BASKET);
-	World::get_world()->troops.emplace_back(enemy_basket);
-	enemy_basket_ = enemy_basket;
+	auto enemy_tree = std::make_shared<Ranged>(enemy_at, &player_data.tree, Team::ENEMY_TREE);
+	World::get_world()->troops.emplace_back(enemy_tree);
+	enemy_tree_ = enemy_tree;
 
 	load_troop_sprite();
-	camera = basket_at;
+	camera = tree_at;
 	clamp_camera();
 
 	player_data = base_data;
@@ -505,14 +505,14 @@ void PlayMode::update(float elapsed) {
 	World::get_world()->update(battle_elapsed);
 	spawn_director->update(battle_elapsed);
 
-	if (enemy_basket_.expired()) {
+	if (enemy_tree_.expired()) {
 		won_ = true;
 		GameAudio::play_jingle(GameAudio::Jingle::Victory);
 		dragging_ = false;
 		box_dragging_ = false;
 		return;
 	}
-	if (basket_.expired()) {
+	if (tree_.expired()) {
 		lost_ = true;
 		GameAudio::play_jingle(GameAudio::Jingle::Defeat);
 		dragging_ = false;
@@ -750,7 +750,7 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 	}
 
 	// In the tutorial, troops wait where they're dropped until the player gives the first order,
-	// so the select and move steps aren't chasing a unit that wanders off toward the enemy basket.
+	// so the select and move steps aren't chasing a unit that wanders off toward the enemy tree.
 	if (practice_ && lesson_ < 3 && World::get_world()->troops.size() > troops_before) {
 		Order hold;
 		hold.type = OrderType::Hold;
@@ -761,14 +761,26 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 // Temp function for prototype
 namespace {
 
+// 0..3 cherry, 4 place blueberry, 5 wait for the drop to pay out, 6 summary.
+constexpr int kPracticeSummary = 6;
+constexpr int kPracticeDropValue = 5;
+
 char const *practice_prompt(int lesson) {
 	switch (lesson) {
 		case 0: return "Drag the cherry from the bar onto your side.";
 		case 1: return "Drag a box around the cherry to select it.";
 		case 2: return "Right-click open ground. The flag is one example.";
 		case 3: return "Right-click the enemy cherry to attack it.";
-		default: return "Destroy the enemy basket on the right to win.";
+		case 4: return "Drag a blueberry onto your side. It gathers water drops.";
+		case 5: return "It hauls the water drop home for resources.";
+		default: return "Destroy the enemy tree on the right to win.";
 	}
+}
+
+// Shown under the main line once resources matter, and again on the summary.
+char const *practice_aside(int lesson) {
+	if (lesson == 5 || lesson >= kPracticeSummary) return "In a match, resources cap at 10.";
+	return nullptr;
 }
 
 std::shared_ptr< Troop > first_named(char const *name, Team team) {
@@ -793,6 +805,40 @@ bool needs_reselect(int lesson) {
 		if (troop && !troop->is_dead() && troop->get_team() == Team::BLUE && troop->is_selected()) return false;
 	}
 	return true;
+}
+
+bool blue_collector_carrying() {
+	for (auto const &troop : World::get_world()->troops) {
+		if (!troop || troop->is_dead() || troop->get_team() != Team::BLUE) continue;
+		if (troop->get_name() != "BlueberryCollector") continue;
+		Collector *collector = dynamic_cast<Collector *>(troop.get());
+		if (collector != nullptr && collector->is_carrying_resource()) return true;
+	}
+	return false;
+}
+
+// The drop a blueberry is hauling, or the free drop nearest the friendly tree.
+std::shared_ptr<WaterDrop> practice_focus_drop() {
+	World *world = World::get_world();
+	for (auto const &troop : world->troops) {
+		if (!troop || troop->is_dead() || troop->get_team() != Team::BLUE) continue;
+		if (troop->get_name() != "BlueberryCollector") continue;
+		Collector *collector = dynamic_cast<Collector *>(troop.get());
+		if (collector == nullptr) continue;
+		if (auto carried = collector->carried_drop()) return carried;
+	}
+	std::shared_ptr<WaterDrop> best;
+	float best_d = std::numeric_limits<float>::infinity();
+	glm::vec2 base = world->map.base_center(false);
+	for (auto const &drop : world->water_drops) {
+		if (!drop || drop->collected || drop->being_carried) continue;
+		float d = glm::distance(drop->position, base);
+		if (d < best_d) {
+			best_d = d;
+			best = drop;
+		}
+	}
+	return best;
 }
 
 // A walkable cell near `from` for the move lesson's flag: straight ahead toward the enemy first,
@@ -857,10 +903,68 @@ void PlayMode::advance_practice() {
 		if (!first_named("CherryBrawler", Team::RED) && !blue_has_order(OrderType::Attack)) spawn_practice_enemy();
 		if (blue_has_order(OrderType::Attack)) lesson_ = 4;
 	}
+	if (lesson_ == 4 || lesson_ == 5) {
+		if (!practice_gather_ready_) prepare_practice_gather();
+	}
+	if (lesson_ == 4 && first_named("BlueberryCollector", Team::BLUE)) lesson_ = 5;
+	if (lesson_ == 5) {
+		if (!first_named("BlueberryCollector", Team::BLUE)) {
+			lesson_ = 4;
+			practice_saw_carry_ = false;
+		} else {
+			int resources = World::get_world()->get_player_resources();
+			bool carrying = blue_collector_carrying();
+			if (carrying) {
+				practice_saw_carry_ = true;
+				practice_resources_while_carrying_ = resources;
+				// Regen shares the resource cap. Keep the cap above this load so the delivery still adds.
+				int need_max = resources + kPracticeDropValue;
+				if (World::get_world()->max_resources < need_max) World::get_world()->max_resources = need_max;
+			} else if (practice_saw_carry_ && resources >= practice_resources_while_carrying_ + kPracticeDropValue) {
+				lesson_ = kPracticeSummary;
+			} else if (practice_saw_carry_) {
+				// The load was dropped short of the tree. Wait for the next delivery.
+				practice_saw_carry_ = false;
+			}
+		}
+	}
+}
+
+void PlayMode::prepare_practice_gather() {
+	practice_gather_ready_ = true;
+	World *world = World::get_world();
+	int cost = player_data.blueberry.resource_cost;
+	if (!first_named("BlueberryCollector", Team::BLUE) && world->get_player_resources() < cost) {
+		world->add_player_resources(cost - world->get_player_resources());
+	}
+	// Base regen and the starting stock share a cap of 10, so a delivered drop often adds nothing.
+	// Leave room for this lesson's drop, plus a little regen, so the counter actually rises.
+	int need_max = world->get_player_resources() + kPracticeDropValue + 3;
+	if (world->max_resources < need_max) world->max_resources = need_max;
+
+	Map &map = world->map;
+	int col = 0;
+	int row = 0;
+	glm::vec2 base = map.base_center(false);
+	if (!map.world_to_cell(glm::vec3(base, 0.0f), col, row)) return;
+	int const col_steps[] = {3, 2, 4, 1, 5};
+	int const row_steps[] = {0, -1, 1, -2, 2};
+	for (int dc : col_steps) {
+		for (int dr : row_steps) {
+			int c = col + dc;
+			int r = row + dr;
+			if (!map.is_walkable(c, r)) continue;
+			glm::vec2 spot(map.cell_center(c, r));
+			if (spot.x >= map.friendly_base_min().x && spot.x <= map.friendly_base_max().x
+				&& spot.y >= map.friendly_base_min().y && spot.y <= map.friendly_base_max().y) continue;
+			world->water_drops.push_back(std::make_shared<WaterDrop>(spot, kPracticeDropValue, false, false));
+			return;
+		}
+	}
 }
 
 bool PlayMode::practice_button(glm::vec2 cursor, bool &start_game) const {
-	if (!practice_ || lesson_ < 4 || window_size.x == 0 || window_size.y == 0) return false;
+	if (!practice_ || lesson_ < kPracticeSummary || window_size.x == 0 || window_size.y == 0) return false;
 	float aspect = float(window_size.x) / float(window_size.y);
 	glm::vec2 ui(
 		(cursor.x / float(window_size.x) * 2.0f - 1.0f) * aspect,
@@ -928,27 +1032,29 @@ void PlayMode::draw_practice_hints(glm::mat4 const &clip) {
 			}
 		}
 	}
+	auto ring = [&](glm::vec2 at, float radius) {
+		constexpr int segs = 18;
+		for (int i = 0; i < segs; ++i) {
+			float a0 = float(i) / float(segs) * 6.2831853f;
+			float a1 = float(i + 1) / float(segs) * 6.2831853f;
+			glm::vec2 p0 = at + radius * glm::vec2(std::cos(a0), std::sin(a0));
+			glm::vec2 p1 = at + radius * glm::vec2(std::cos(a1), std::sin(a1));
+			glm::vec2 q0 = at + (radius + 0.12f) * glm::vec2(std::cos(a0), std::sin(a0));
+			glm::vec2 q1 = at + (radius + 0.12f) * glm::vec2(std::cos(a1), std::sin(a1));
+			verts.push_back({glm::vec3(p0, 0.0f), ink});
+			verts.push_back({glm::vec3(q0, 0.0f), ink});
+			verts.push_back({glm::vec3(q1, 0.0f), ink});
+			verts.push_back({glm::vec3(p0, 0.0f), ink});
+			verts.push_back({glm::vec3(q1, 0.0f), ink});
+			verts.push_back({glm::vec3(p1, 0.0f), ink});
+		}
+	};
 	if (lesson_ == 3) {
 		auto enemy = first_named("CherryBrawler", Team::RED);
-		if (enemy) {
-			glm::vec2 at = enemy->get_position();
-			float radius = glm::mix(0.9f, 1.35f, pulse);
-			constexpr int segs = 18;
-			for (int i = 0; i < segs; ++i) {
-				float a0 = float(i) / float(segs) * 6.2831853f;
-				float a1 = float(i + 1) / float(segs) * 6.2831853f;
-				glm::vec2 p0 = at + radius * glm::vec2(std::cos(a0), std::sin(a0));
-				glm::vec2 p1 = at + radius * glm::vec2(std::cos(a1), std::sin(a1));
-				glm::vec2 q0 = at + (radius + 0.12f) * glm::vec2(std::cos(a0), std::sin(a0));
-				glm::vec2 q1 = at + (radius + 0.12f) * glm::vec2(std::cos(a1), std::sin(a1));
-				verts.push_back({glm::vec3(p0, 0.0f), ink});
-				verts.push_back({glm::vec3(q0, 0.0f), ink});
-				verts.push_back({glm::vec3(q1, 0.0f), ink});
-				verts.push_back({glm::vec3(p0, 0.0f), ink});
-				verts.push_back({glm::vec3(q1, 0.0f), ink});
-				verts.push_back({glm::vec3(p1, 0.0f), ink});
-			}
-		}
+		if (enemy) ring(enemy->get_position(), glm::mix(0.9f, 1.35f, pulse));
+	}
+	if (lesson_ == 4 || lesson_ == 5) {
+		if (auto drop = practice_focus_drop()) ring(drop->position, glm::mix(0.55f, 0.9f, pulse));
 	}
 	if (verts.empty()) return;
 	glEnable(GL_BLEND);
@@ -979,17 +1085,25 @@ void PlayMode::draw_practice_banner() {
 		verts.push_back({glm::vec3(mx.x, mx.y, 0.0f), color});
 		verts.push_back({glm::vec3(mn.x, mx.y, 0.0f), color});
 	};
-	std::string prompt = needs_reselect(lesson_) ? "Select your cherry first: drag a box around it." : practice_prompt(lesson_);
-	float prompt_advance = 0.0f;
-	ui_font->layout(prompt, &prompt_advance);
+	bool reselect = needs_reselect(lesson_);
+	std::string prompt = reselect ? "Select your cherry first: drag a box around it." : practice_prompt(lesson_);
+	char const *aside = reselect ? nullptr : practice_aside(lesson_);
+	auto text_width = [&](std::string const &text, float height) {
+		float advance = 0.0f;
+		ui_font->layout(text, &advance);
+		float glyph_px = (height * 0.5f * float(window_size.y)) / float(ui_font->pixel_height);
+		return advance * glyph_px * (2.0f / float(window_size.x));
+	};
 	float prompt_h = 0.05f;
-	float prompt_px = (prompt_h * 0.5f * float(window_size.y)) / float(ui_font->pixel_height);
-	float prompt_w = prompt_advance * prompt_px * (2.0f / float(window_size.x));
+	float prompt_w = text_width(prompt, prompt_h);
+	float aside_w = aside ? text_width(aside, prompt_h) : 0.0f;
 	float pad_x = 0.045f;
 	float pad_y = 0.016f;
+	float line_gap = aside ? 0.012f : 0.0f;
+	float block_h = prompt_h + (aside ? prompt_h + line_gap : 0.0f);
 	float prompt_cy = 0.90f;
-	float half_w = std::min(0.5f * prompt_w + pad_x, 0.72f);
-	rect(glm::vec2(-half_w, prompt_cy - prompt_h * 0.5f - pad_y), glm::vec2(half_w, prompt_cy + prompt_h * 0.5f + pad_y), glm::u8vec4(236, 222, 186, 230));
+	float half_w = std::min(0.5f * std::max(prompt_w, aside_w) + pad_x, 0.86f);
+	rect(glm::vec2(-half_w, prompt_cy - block_h * 0.5f - pad_y), glm::vec2(half_w, prompt_cy + block_h * 0.5f + pad_y), glm::u8vec4(236, 222, 186, 230));
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
@@ -1016,11 +1130,18 @@ void PlayMode::draw_practice_banner() {
 	};
 	{
 		TextRenderer renderer(glm::mat4(1.0f));
-		auto [anchor, x_axis, y_axis] = place_text(prompt, glm::vec2(0.0f, prompt_cy), prompt_h);
-		renderer.draw_text(*ui_font, prompt, anchor, x_axis, y_axis, glm::u8vec4(27, 16, 18, 255));
+		glm::u8vec4 ink(27, 16, 18, 255);
+		float main_line = aside ? prompt_cy + 0.5f * (prompt_h + line_gap) : prompt_cy;
+		float aside_line = prompt_cy - 0.5f * (prompt_h + line_gap);
+		auto [anchor, x_axis, y_axis] = place_text(prompt, glm::vec2(0.0f, main_line), prompt_h);
+		renderer.draw_text(*ui_font, prompt, anchor, x_axis, y_axis, ink);
+		if (aside) {
+			auto [aside_anchor, aside_x, aside_y] = place_text(aside, glm::vec2(0.0f, aside_line), prompt_h);
+			renderer.draw_text(*ui_font, aside, aside_anchor, aside_x, aside_y, ink);
+		}
 	}
 
-	if (lesson_ >= 4) {
+	if (lesson_ >= kPracticeSummary) {
 		// Same buttons as the title screen: lift on hover, press down while held, bold labels.
 		auto lift = [&](int which) {
 			if (practice_hover_ != which) return glm::vec2(0.0f);
@@ -1437,7 +1558,7 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 		for (auto const &layer : layered) {
 			Troop *troop = layer.troop;
 			Team team = troop->get_team();
-			if (team != Team::BLUE && team != Team::RED && team != Team::BASKET && team != Team::ENEMY_BASKET) continue;
+			if (team != Team::BLUE && team != Team::RED && team != Team::TREE && team != Team::ENEMY_TREE) continue;
 			int max_hp = troop->get_max_health();
 			int hp = troop->get_health();
 			if (max_hp <= 0 || hp >= max_hp) continue;
@@ -1450,7 +1571,7 @@ void PlayMode::draw_troops(glm::mat4 const &clip_from_world) {
 				half = anim->clip_for(attacking).half;
 				c = anim->sprite_center(c, attacking, troop->faces_left());
 				if (troop->get_data_asset() != nullptr && troop->get_data_asset()->is_flying) c.y += flight_altitude;
-			} else if (team == Team::BASKET || team == Team::ENEMY_BASKET) {
+			} else if (team == Team::TREE || team == Team::ENEMY_TREE) {
 				half = glm::vec2(1.6f);
 			}
 			float width = std::max(half.x * 1.55f, 0.9f);
@@ -1525,7 +1646,7 @@ TroopDataAsset const *PlayMode::asset_for(std::string const &name) const {
 	if (name == base_data.pineapple.name) return &base_data.pineapple;
 	if (name == base_data.orange.name) return &base_data.orange;
 	if (name == base_data.blueberry.name) return &base_data.blueberry;
-	if (name == base_data.basket.name) return &base_data.basket;
+	if (name == base_data.tree.name) return &base_data.tree;
 	return nullptr;
 }
 
@@ -1636,7 +1757,7 @@ void PlayMode::draw_troop_description() {
 	glDisable(GL_BLEND);
 }
 
-// Counts living fighters on each side; the baskets are bases, so they aren't included.
+// Counts living fighters on each side; the trees are bases, so they aren't included.
 void PlayMode::draw_unit_stats() {
 	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
 
@@ -2147,15 +2268,33 @@ void PlayMode::draw_bar() {
 	}
 	glDisable(GL_BLEND);
 
-	if (practice_ && lesson_ == 0) {
+	if (practice_ && (lesson_ == 0 || lesson_ == 4 || lesson_ == 5)) {
+		int want = 0;
+		if (lesson_ == 4) {
+			want = -1;
+			int index = 0;
+			for (auto const &anim : characters_) {
+				if (!anim.show_in_bar) continue;
+				if (anim.troop_name == "BlueberryCollector" && anim.team == Team::BLUE) {
+					want = index;
+					break;
+				}
+				++index;
+			}
+		}
 		slot_index = 0;
 		for (auto const &anim : characters_) {
 			if (!anim.show_in_bar) continue;
-			if (slot_index == 0) {
-				float x = bar_slot_x(place, slot_index);
+			bool mark_slot = lesson_ != 5 && slot_index == want;
+			bool mark_stock = lesson_ == 5 && slot_index == 0;
+			if (mark_slot || mark_stock) {
+				float x = mark_stock ? (place.coin_cx - place.coin_r) : bar_slot_x(place, slot_index);
+				float w = mark_stock ? (place.text_left + place.text_h * 1.6f) - x : side;
+				float top = mark_stock ? place.coin_cy - place.coin_r : place.slot_y;
+				float bot = mark_stock ? place.coin_cy + place.coin_r : place.slot_y + side;
 				float grow = 6.0f + 4.0f * std::sin(time_ * 5.0f);
-				glm::vec2 mn(ndc_x(x - grow), ndc_y(place.slot_y + side + grow));
-				glm::vec2 mx(ndc_x(x + side + grow), ndc_y(place.slot_y - grow));
+				glm::vec2 mn(ndc_x(x - grow), ndc_y(bot + grow));
+				glm::vec2 mx(ndc_x(x + w + grow), ndc_y(top - grow));
 				float t = ndc_w(5.0f);
 				ColorVertex frame[24];
 				auto edge = [&](int base, glm::vec2 a, glm::vec2 b) {

@@ -4,11 +4,11 @@
 
 namespace {
 
-bool is_basket(Team team) {
-	return team == Team::BASKET || team == Team::ENEMY_BASKET;
+bool is_tree(Team team) {
+	return team == Team::TREE || team == Team::ENEMY_TREE;
 }
 
-glm::vec2 friendly_basket_edge(glm::vec2 from, Team team) {
+glm::vec2 friendly_tree_edge(glm::vec2 from, Team team) {
 	Map const &map = World::get_world()->map;
 	glm::vec2 mn = (team == Team::BLUE) ? map.friendly_base_min() : map.enemy_base_min();
 	glm::vec2 mx = (team == Team::BLUE) ? map.friendly_base_max() : map.enemy_base_max();
@@ -39,7 +39,7 @@ void Collector::update(float elapsed)
     // Drop current resource to base
     if (auto drop = carried_water_drop.lock()) {
         drop->position = position + glm::vec2(0.0f, 0.5f);
-        glm::vec2 deposit_position = friendly_basket_edge(position, team);
+        glm::vec2 deposit_position = friendly_tree_edge(position, team);
 		
         if (glm::distance(position, deposit_position) <= collector_data->deposit_radius) {
 			world->add_resources(team, drop->value);
@@ -79,7 +79,7 @@ void Collector::update(float elapsed)
 	}
 
 	// No drops on the map, retreat to base and wait
-	glm::vec2 home_position = friendly_basket_edge(position, team);
+	glm::vec2 home_position = friendly_tree_edge(position, team);
 	if (glm::distance(position, home_position) > collector_data->deposit_radius) {
 		walk_toward(elapsed, home_position);
 	}
@@ -107,7 +107,7 @@ void Collector::walk_toward(float elapsed, glm::vec2 goal) {
     std::vector<glm::vec2> others;
     for (auto const &troop : World::get_world()->troops) {
         if (troop->is_dead()) continue;
-        if (is_basket(troop->get_team())) continue;
+        if (is_tree(troop->get_team())) continue;
         others.push_back(troop->get_position());
     }
 

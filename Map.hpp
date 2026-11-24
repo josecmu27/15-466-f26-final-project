@@ -75,7 +75,7 @@ struct Map {
 	glm::vec2 enemy_base_min() const { return enemy_base_min_; }
 	glm::vec2 enemy_base_max() const { return enemy_base_max_; }
 
-	// Center and half-size of a drawn basket. `enemy` selects the right-hand base.
+	// Center and half-size of a drawn tree. `enemy` selects the right-hand base.
 	glm::vec2 base_center(bool enemy) const {
 		if (enemy) {
 			return 0.5f * (enemy_base_min() + enemy_base_max());

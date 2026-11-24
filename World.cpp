@@ -10,6 +10,7 @@ void World::clear()
     water_drops.clear();
     player_resources = 0;
     director_resources = 0;
+    max_resources = 10;
     match_time_remaining = match_time_duration;
     regeneration_timer = 1.0f;
 }
@@ -109,7 +110,7 @@ void World::cleanup_defeated_troops()
             if ((*it)->is_dead())
         {
             Team team = (*it)->get_team();
-            if (team == Team::BASKET || team == Team::ENEMY_BASKET) GameAudio::play_at(GameAudio::Sfx::BasketBreak, (*it)->get_position());
+            if (team == Team::TREE || team == Team::ENEMY_TREE) GameAudio::play_at(GameAudio::Sfx::TreeBreak, (*it)->get_position());
             auto water_drop = std::make_shared<WaterDrop>((*it)->get_position(), 5, false, false);
             water_drops.push_back(water_drop);
             it = troops.erase(it);
