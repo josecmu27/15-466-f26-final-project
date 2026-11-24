@@ -128,4 +128,7 @@ struct PlayMode : Mode {
 	int lesson_ = 0;
 	bool leave_practice_ = false;
 	bool start_real_ = false;
+	// Summary buttons (0 = PLAY, 1 = TITLE, -1 = none), for the title screen's hover and press look.
+	int practice_hover_ = -1;
+	int practice_pressed_ = -1;
 };

@@ -1,6 +1,7 @@
 #include "GameAudio.hpp"
 
 #include "Load.hpp"
+#include "Settings.hpp"
 #include "Sound.hpp"
 #include "World.hpp"
 #include "data_path.hpp"
@@ -108,7 +109,7 @@ void GameAudio::play(Sfx sfx, float pan) {
 	last_played[i] = t;
 
 	size_t pick = std::uniform_int_distribution< size_t >(0, samples.size() - 1)(rng);
-	Sound::play(*samples[pick], spec(sfx).volume, std::clamp(pan, -1.0f, 1.0f));
+	Sound::play(*samples[pick], spec(sfx).volume * Settings::sfx_volume, std::clamp(pan, -1.0f, 1.0f));
 }
 
 void GameAudio::play_at(Sfx sfx, glm::vec2 world_position) {
@@ -124,13 +125,17 @@ void GameAudio::play_music(Music which) {
 	fade_out_music();
 	music_volume = (which == Music::Title ? TitleMusicVolume : BattleMusicVolume);
 	music = Sound::loop(*sample, 0.0f);
-	music->set_volume(music_volume * music_level, MusicFade);
+	music->set_volume(music_volume * music_level * Settings::music_volume, MusicFade);
 	music_sample = sample;
 }
 
 void GameAudio::set_music_level(float level) {
 	music_level = level;
-	if (music) music->set_volume(music_volume * music_level, 0.2f);
+	refresh_music_volume();
+}
+
+void GameAudio::refresh_music_volume() {
+	if (music) music->set_volume(music_volume * music_level * Settings::music_volume, 0.2f);
 }
 
 void GameAudio::stop_music() {
@@ -140,5 +145,5 @@ void GameAudio::stop_music() {
 void GameAudio::play_jingle(Jingle jingle) {
 	fade_out_music();
 	if (!JinglesEnabled) return;
-	Sound::play(*(jingle == Jingle::Victory ? bank->victory : bank->defeat), JingleVolume);
+	Sound::play(*(jingle == Jingle::Victory ? bank->victory : bank->defeat), JingleVolume * Settings::music_volume);
 }

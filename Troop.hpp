@@ -27,7 +27,8 @@ enum TroopType {
 };
 
 enum class OrderType {
-    None, Move, Attack
+    None, Move, Attack,
+    Hold // stay put but still fight anything that comes into range; any new order replaces it
 };
 
 struct Order {
