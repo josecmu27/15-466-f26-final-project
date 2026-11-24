@@ -102,11 +102,6 @@ struct PlayMode : Mode {
 	GLuint bar_vbo_ = 0;
 	GLuint bar_vao_ = 0;
 
-	// TODO: Remove this after prototype!
-	float troop_spawn_rate = 7.5f;
-	float troop_spawn_timer = 0.0f;
-
-	void spawn_vegetable_troop();
 	void advance_practice();
 	void spawn_practice_enemy();
 	void draw_practice_hints(glm::mat4 const &clip);

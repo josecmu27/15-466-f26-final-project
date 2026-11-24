@@ -47,6 +47,8 @@ void World::update(float elapsed)
 
     for (auto &projectile : projectiles){
         projectile->update(elapsed);
+        glm::vec2 at = projectile->get_position();
+        if (at != glm::clamp(at, left, right)) projectile->set_inactive(); // left the map
     }
 
     handle_collisions();
@@ -75,9 +77,11 @@ void World::handle_collisions()
 {
     for (auto &troop : troops)
     {
-        
+        if (troop->is_dead()) continue; // already down this frame; don't soak up another shot
+
         for (auto &projectile : projectiles)
         {
+            if (projectile->is_inactive()) continue; // each shot hits at most one troop
             if (projectile->get_team() == troop->get_team()) continue;
             
             float dist_squared = (troop->get_position().x - projectile->get_position().x) *

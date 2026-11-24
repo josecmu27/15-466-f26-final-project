@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <limits>
 #include "Troop.hpp"
 #include <glm/glm.hpp>
 
@@ -12,10 +13,14 @@ protected:
     float radius;
     Team team;
     bool active = true;
+    glm::vec2 origin;
+    float max_range; // a shot that misses goes inactive after flying this far
 
 public:
-    Projectile(glm::vec2 position_, glm::vec2 velocity_, int damage_, float radius_, Team team_) :
-               position(position_), velocity(velocity_), damage(damage_), radius(radius_), team(team_) {}
+    Projectile(glm::vec2 position_, glm::vec2 velocity_, int damage_, float radius_, Team team_,
+               float max_range_ = std::numeric_limits<float>::infinity()) :
+               position(position_), velocity(velocity_), damage(damage_), radius(radius_), team(team_),
+               origin(position_), max_range(max_range_) {}
 
     void update(float elapsed);
 

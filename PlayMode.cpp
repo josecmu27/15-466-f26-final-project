@@ -425,7 +425,6 @@ void PlayMode::update(float elapsed) {
 	float battle_elapsed = elapsed * Settings::game_speed;
 
 	time_ += battle_elapsed;
-	troop_spawn_timer -= battle_elapsed;
 
 	World::get_world()->update(battle_elapsed);
 	spawn_director->update(battle_elapsed);
@@ -443,11 +442,6 @@ void PlayMode::update(float elapsed) {
 		dragging_ = false;
 		box_dragging_ = false;
 		return;
-	}
-
-	if (troop_spawn_timer < 0.0f){
-		spawn_vegetable_troop();
-		troop_spawn_timer = troop_spawn_rate;
 	}
 }
 
@@ -688,17 +682,6 @@ void PlayMode::place_troop(glm::vec2 spawn_pos) {
 }
 
 // Temp function for prototype
-void PlayMode::spawn_vegetable_troop()
-{
-	int col = (rand() % 6) + 10; // place between cols 10-16
-	int row = (rand() % 11); // place bewteen rows 0-10
-
-	if (!World::get_world()->map.is_walkable(col, row)) return;
-	
-	glm::vec2 pos(World::get_world()->map.cell_center(col, row));
-	World::get_world()->troops.push_back(std::make_shared<Brawler>(pos, &player_data.cherry, Team::RED));
-}
-
 namespace {
 
 char const *practice_prompt(int lesson) {
