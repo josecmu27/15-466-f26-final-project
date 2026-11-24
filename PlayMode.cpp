@@ -175,6 +175,46 @@ static const float troop_size = 0.7f;
 static glm::vec2 restart_center() { return glm::vec2(0.0f, -0.42f); }
 static glm::vec2 restart_half() { return glm::vec2(0.26f, 0.065f); }
 
+struct MatchButton {
+	int id = 0;
+	char const *label = "";
+	float x0 = 0.0f;
+	float y0 = 0.0f;
+	float x1 = 0.0f;
+	float y1 = 0.0f;
+};
+
+// TITLE and RESTART, right-aligned in the bottom bar. y grows down, in window pixels.
+void match_button_boxes(glm::uvec2 window, MatchButton out[2]) {
+	float bar_h = float(window.y) * PlayMode::bar_frac_;
+	float pad = bar_h * 0.18f;
+	float gap = pad * 0.5f;
+	float bh = bar_h - pad * 2.0f;
+	float y0 = float(window.y) - bar_h + pad;
+	float text_h = bh * 0.46f;
+	auto width_for = [&](char const *label) {
+		float advance = 0.0f;
+		ui_font->layout(label, &advance);
+		float text_w = advance * (text_h / float(std::max(ui_font->pixel_height, 1u)));
+		return text_w + bh * 0.7f;
+	};
+	float right = float(window.x) - pad;
+	float restart_w = width_for("RESTART");
+	float title_w = width_for("TITLE");
+	out[1] = {1, "RESTART", right - restart_w, y0, right, y0 + bh};
+	out[0] = {0, "TITLE", out[1].x0 - gap - title_w, y0, out[1].x0 - gap, y0 + bh};
+}
+
+int match_button_at(glm::vec2 mouse, glm::uvec2 window) {
+	if (window.x == 0 || window.y == 0) return -1;
+	MatchButton boxes[2];
+	match_button_boxes(window, boxes);
+	for (MatchButton const &box : boxes) {
+		if (mouse.x >= box.x0 && mouse.x <= box.x1 && mouse.y >= box.y0 && mouse.y <= box.y1) return box.id;
+	}
+	return -1;
+}
+
 static bool pointer_on_restart(glm::vec2 mouse, glm::uvec2 window) {
 	if (window.x == 0 || window.y == 0) return false;
 	glm::vec2 at(
@@ -266,6 +306,28 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 	if (evt.type == SDL_EVENT_MOUSE_MOTION) {
 		mouse = glm::vec2(evt.motion.x, evt.motion.y);
 		if (box_dragging_) mouse_to_world(box_end_);
+		return true;
+	}
+	if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN && evt.button.button == SDL_BUTTON_LEFT) {
+		glm::vec2 at(evt.button.x, evt.button.y);
+		int button = match_button_at(at, window_size);
+		if (button >= 0) {
+			mouse = at;
+			match_pressed_ = button;
+			return true;
+		}
+	}
+	if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP && evt.button.button == SDL_BUTTON_LEFT && match_pressed_ >= 0) {
+		mouse = glm::vec2(evt.button.x, evt.button.y);
+		int button = match_button_at(mouse, window_size);
+		if (button == match_pressed_) {
+			GameAudio::play(GameAudio::Sfx::UiConfirm);
+			if (button == 0) to_title_ = true;
+			else restart_ = true;
+		}
+		match_pressed_ = -1;
+		dragging_ = false;
+		box_dragging_ = false;
 		return true;
 	}
 	if (won_ || lost_) {
@@ -389,6 +451,20 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 }
 
 void PlayMode::update(float elapsed) {
+	int button_hover = match_button_at(mouse, window_size);
+	if (button_hover != match_hover_ && button_hover >= 0) GameAudio::play(GameAudio::Sfx::UiHover);
+	match_hover_ = button_hover;
+
+	if (to_title_) {
+		auto keep_alive = shared_from_this();
+		Mode::set_current(std::make_shared< TitleMode >());
+		return;
+	}
+	if (restart_) {
+		auto keep_alive = shared_from_this();
+		Mode::set_current(std::make_shared< PlayMode >(level_ascii, practice_));
+		return;
+	}
 
 	if (pan_left) camera.x -= elapsed * camera_speed;
 	if (pan_right) camera.x += elapsed * camera_speed;
@@ -413,12 +489,6 @@ void PlayMode::update(float elapsed) {
 		time_ += elapsed;
 		advance_practice();
 		World::get_world()->update(elapsed);
-		return;
-	}
-
-	if (restart_) {
-		auto keep_alive = shared_from_this();
-		Mode::set_current(std::make_shared< PlayMode >(level_ascii));
 		return;
 	}
 
@@ -502,6 +572,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size_) {
 	if (practice_) draw_practice_banner();
 	if (won_) draw_victory_overlay();
 	else if (lost_) draw_defeat_overlay();
+	draw_match_buttons();
 
 	GL_ERRORS();
 }
@@ -1773,6 +1844,67 @@ void PlayMode::draw_end_overlay(std::string const &label, glm::u8vec4 color) {
 			0.0f
 		);
 		renderer.draw_text(*ui_font, restart_label, restart_at, glm::vec3(restart_sx, 0.0f, 0.0f), glm::vec3(0.0f, restart_sy, 0.0f), glm::u8vec4(255, 236, 196, 255));
+	}
+	glDisable(GL_BLEND);
+}
+
+void PlayMode::draw_match_buttons() {
+	if (bar_vao_ == 0 || window_size.x == 0 || window_size.y == 0) return;
+	MatchButton boxes[2];
+	match_button_boxes(window_size, boxes);
+
+	auto ndc_x = [&](float x) { return (x / float(window_size.x)) * 2.0f - 1.0f; };
+	auto ndc_y = [&](float y) { return 1.0f - (y / float(window_size.y)) * 2.0f; };
+	auto ndc_w = [&](float px) { return px / float(window_size.x) * 2.0f; };
+	auto ndc_h = [&](float px) { return px / float(window_size.y) * 2.0f; };
+
+	std::vector< ColorVertex > mesh;
+	float rad = (boxes[0].y1 - boxes[0].y0) * 0.22f;
+	for (MatchButton const &box : boxes) {
+		float shift = (match_pressed_ == box.id && match_hover_ == box.id) ? 2.0f : 0.0f;
+		glm::vec2 mn(ndc_x(box.x0), ndc_y(box.y1 + shift));
+		glm::vec2 mx(ndc_x(box.x1), ndc_y(box.y0 + shift));
+		bool hot = match_hover_ == box.id;
+		glm::u8vec4 fill = box.id == 1
+			? (hot ? glm::u8vec4(222, 92, 70, 255) : glm::u8vec4(196, 58, 52, 255))
+			: (hot ? glm::u8vec4(255, 244, 220, 255) : glm::u8vec4(236, 222, 186, 255));
+		add_round_rect(mesh, mn, mx, ndc_w(rad), ndc_h(rad), glm::u8vec4(27, 16, 18, 255));
+		float inset = rad * 0.18f;
+		add_round_rect(mesh,
+			mn + glm::vec2(ndc_w(inset), ndc_h(inset)),
+			mx - glm::vec2(ndc_w(inset), ndc_h(inset)),
+			ndc_w(rad), ndc_h(rad), fill);
+	}
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindBuffer(GL_ARRAY_BUFFER, bar_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, mesh.size() * sizeof(ColorVertex), mesh.data(), GL_DYNAMIC_DRAW);
+	glUseProgram(color_program->program);
+	glBindVertexArray(bar_vao_);
+	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)mesh.size());
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+
+	float px_h = 2.0f / float(window_size.y);
+	{
+		TextRenderer renderer(glm::mat4(1.0f));
+		for (MatchButton const &box : boxes) {
+			float shift = (match_pressed_ == box.id && match_hover_ == box.id) ? 2.0f : 0.0f;
+			float advance = 0.0f;
+			ui_font->layout(box.label, &advance);
+			float text_h = (box.y1 - box.y0) * 0.46f;
+			float unit = text_h / float(std::max(ui_font->pixel_height, 1u));
+			float sx = unit * 2.0f / float(window_size.x);
+			float sy = unit * 2.0f / float(window_size.y);
+			float cx = 0.5f * (box.x0 + box.x1);
+			float cy = 0.5f * (box.y0 + box.y1) + shift;
+			glm::vec3 at(ndc_x(cx) - 0.5f * advance * sx, ndc_y(cy) - kFontCapCenter * text_h * px_h, 0.0f);
+			glm::u8vec4 ink = box.id == 1 ? glm::u8vec4(255, 236, 196, 255) : glm::u8vec4(27, 16, 18, 255);
+			renderer.draw_text(*ui_font, box.label, at, glm::vec3(sx, 0.0f, 0.0f), glm::vec3(0.0f, sy, 0.0f), ink);
+		}
 	}
 	glDisable(GL_BLEND);
 }

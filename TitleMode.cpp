@@ -24,11 +24,11 @@ using namespace UiDraw;
 namespace {
 
 // Buttons sit low, under the two lineups (all the same size):
-const glm::vec2 kLevel1Center(-0.6f, -0.32f);
-const glm::vec2 kLevel2Center(-0.6f, -0.47f);
-const glm::vec2 kHowCenter(-0.6f, -0.62f);
-const glm::vec2 kSettingsCenter(-0.6f, -0.77f);
-const glm::vec2 kQuitCenter(-0.6f, -0.92f);
+const glm::vec2 kLevel1Center(0.0f, -0.32f);
+const glm::vec2 kLevel2Center(0.0f, -0.47f);
+const glm::vec2 kHowCenter(0.0f, -0.62f);
+const glm::vec2 kSettingsCenter(0.0f, -0.77f);
+const glm::vec2 kQuitCenter(0.0f, -0.92f);
 const glm::vec2 kButtonHalf(0.40f, 0.062f);
 
 bool inside_button(glm::vec2 ui, glm::vec2 center, glm::vec2 half = kButtonHalf) {
@@ -397,7 +397,7 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 	if (!settings_open_) {
 		Mesh controls;
 		// A dark plate so the labels stay readable over the fighters' feet.
-		paint_polygon(controls, round_rect(glm::vec2(-0.52f - 0.6f, -1.04f), glm::vec2(0.52f - 0.6f, -0.23f), 0.08f, 4), glm::u8vec4(16, 10, 12, 215));
+		paint_polygon(controls, round_rect(glm::vec2(-0.52f, -1.04f), glm::vec2(0.52f, -0.23f), 0.08f, 4), glm::u8vec4(16, 10, 12, 215));
 		auto menu_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover) {
 			paint_button(controls, center, kButtonHalf, button_lift(button), hover_ == button ? fill_hover : fill);
 		};

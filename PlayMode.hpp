@@ -62,6 +62,7 @@ struct PlayMode : Mode {
 	void draw_pause_overlay();
 	void draw_unit_stats();
 	void draw_match_clock();
+	void draw_match_buttons();
 	void draw_victory_overlay();
 	void draw_defeat_overlay();
 	void draw_end_overlay(std::string const &label, glm::u8vec4 color);
@@ -75,6 +76,10 @@ struct PlayMode : Mode {
 	bool won_ = false;
 	bool lost_ = false;
 	bool restart_ = false;
+	bool to_title_ = false;
+	// 0 = TITLE, 1 = RESTART, -1 = none. These sit on the right of the bottom bar.
+	int match_hover_ = -1;
+	int match_pressed_ = -1;
 
 	GLuint troop_vbo_ = 0;
 	GLuint troop_vao_ = 0;
