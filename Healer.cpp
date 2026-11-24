@@ -43,7 +43,19 @@ void Healer::update(float elapsed)
 {
     if (team == Team::BASKET || team == Team::ENEMY_BASKET) return;
 
-    determine_target();
+    auto ordered = order.attack_target.lock();
+    if (order.type == OrderType::Attack && (!ordered || ordered->is_dead())) cancel_order();
+    if (order.type == OrderType::Move && glm::distance(position, order.move_target) < order.arrive_radius) cancel_order();
+
+    if (order.type == OrderType::Move) {
+        target_troop.reset();
+        shot_cycle = -1;
+        walk_toward(elapsed, order.move_target);
+        return;
+    }
+
+    if (order.type == OrderType::Attack) target_troop = ordered;
+    else determine_target();
 
     auto target = target_troop.lock();
     bool in_range = target && !target->is_dead()

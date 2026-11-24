@@ -27,7 +27,15 @@ void Collector::update(float elapsed)
     World* world = World::get_world();
 
     if (!collector_data || !world) return;
-
+	
+	//different from other troops, cancels attack immediately
+    if (order.type == OrderType::Attack) cancel_order();
+    if (order.type == OrderType::Move && glm::distance(position, order.move_target) < order.arrive_radius) cancel_order();
+    if (order.type == OrderType::Move) {
+        walk_toward(elapsed, order.move_target);
+        return;
+    }
+	
     // Drop current resource to base
     if (auto drop = carried_water_drop.lock()) {
         drop->position = position + glm::vec2(0.0f, 0.5f);
