@@ -29,6 +29,11 @@ struct Map {
 	explicit Map(std::string const &ascii);
 	~Map();
 
+	void load(std::string const &ascii);
+
+	static char const level_0[];
+	static char const level_1[];
+
 	Map(Map const &) = delete;
 	Map &operator=(Map const &) = delete;
 
@@ -79,6 +84,7 @@ private:
 		Rock,
 		Water,
 		Bridge,
+		BridgeV,
 	};
 
 	struct Stroke {
@@ -96,6 +102,8 @@ private:
 	void rebuild();
 	void upload(GLuint &vbo, GLuint &vao, std::vector< Vertex > const &verts) const;
 	void draw_uploaded(GLuint vao, GLuint count, glm::mat4 const &clip_from_world) const;
+
+	void release();
 
 	size_t index(int col, int row) const;
 
@@ -115,8 +123,10 @@ private:
 	mutable GLuint frame_vbo_ = 0;
 	mutable GLuint frame_vao_ = 0;
 
+	glm::ivec2 friendly_cell;
+	glm::ivec2 enemy_cell;
+
 	void load_base_sprite();
-	void place_river();
 	glm::vec2 base_anchor_ = glm::vec2(0.0f);
 	glm::vec2 enemy_anchor_ = glm::vec2(0.0f);
 	glm::vec2 friendly_base_min_ = glm::vec2(0.0f);

@@ -150,28 +150,48 @@ std::vector< glm::vec2 > boil_points(std::vector< glm::vec2 > pts, float amount,
 
 } // namespace
 
-Map::Map() : Map(
-	"..................\n"
-	"..................\n"
-	"..................\n"
-	"..........o.......\n"
-	"..................\n"
-	"..................\n"
-	"...........o......\n"
-	"......oo..........\n"
-	"...........o......\n"
-	"..................\n"
-) {
+Map::Map(std::string const &ascii) {
+	load(ascii);
 }
 
-Map::Map(std::string const &ascii) {
+Map::Map() {
+	load(level_0);
+}
+
+char const Map::level_0[] =
+	"........~~........\n"
+	"........==........\n"
+	"........~~........\n"
+	"........~~o.......\n"
+	"FF......~~......EE\n"
+	"FF......==......EE\n"
+	"........~~.o......\n"
+	"......oo~~........\n"
+	"........==.o......\n"
+	"........~~........\n";
+
+char const Map::level_1[] =
+	"FF................\n"
+	"FF................\n"
+	"..................\n"
+	"~~~~~~~~|~~~~~~~~~\n"
+	"~~~~~~~~|~~~~~~~~~\n"
+	"..................\n"
+	"................EE\n"
+	"................EE\n";
+
+Map::~Map() {
+	release();
+}
+
+void Map::load(std::string const &ascii) {
+	release();
 	build_from_ascii(ascii);
 	load_base_sprite();
-	place_river();
 	rebuild();
 }
 
-Map::~Map() {
+void Map::release() {
 	if (backdrop_vao_ != 0) glDeleteVertexArrays(1, &backdrop_vao_);
 	if (backdrop_vbo_ != 0) glDeleteBuffers(1, &backdrop_vbo_);
 	if (frame_vao_ != 0) glDeleteVertexArrays(1, &frame_vao_);
@@ -209,7 +229,7 @@ bool Map::world_to_cell(glm::vec3 const &world, int &col, int &row) const {
 bool Map::is_walkable(int col, int row) const {
 	if (!in_bounds(col, row)) return false;
 	Tile tile = tiles_[index(col, row)];
-	return tile == Tile::Grass || tile == Tile::Bridge;
+	return tile == Tile::Grass || tile == Tile::Bridge || tile == Tile::BridgeV;
 }
 
 bool Map::can_place(int col, int row) const {
@@ -378,14 +398,31 @@ void Map::build_from_ascii(std::string const &ascii) {
 
 	tiles_.assign(size_t(cols_ * rows_), Tile::Grass);
 
+	bool found_f = false;
+	bool found_e = false;
+
 	for (int row = 0; row < rows_; ++row) {
 		if ((int)rows[row].size() != cols_) {
 			throw std::runtime_error("Map: level rows must all be the same width");
 		}
 		for (int col = 0; col < cols_; ++col) {
 			char ch = rows[row][col];
-			if (ch == 'o') {
-				tiles_[index(col, row)] = Tile::Rock;
+			Tile &tile = tiles_[index(col, row)];
+			if (ch == 'o') tile = Tile::Rock;
+			else if (ch == '~') tile = Tile::Water;
+			else if (ch == '=') tile = Tile::Bridge;
+			else if (ch == '|') tile = Tile::BridgeV;
+			else if (ch == 'F') {
+				tile = Tile::Base;
+				if (!found_f)
+					friendly_cell = glm::ivec2(col, row);
+				found_f = true;
+			}
+			else if (ch == 'E') {
+				tile = Tile::Base;
+				if (!found_e)
+					enemy_cell = glm::ivec2(col, row);
+				found_e = true;
 			}
 			else if (ch != '.') {
 				throw std::runtime_error(std::string("Map: unknown tile '") + ch + "'");
@@ -422,15 +459,11 @@ void Map::load_base_sprite() {
 	base_uv_min_ = glm::vec2(float(min_x) / float(size.x), float(min_y) / float(size.y));
 	base_uv_max_ = glm::vec2(float(max_x + 1) / float(size.x), float(max_y + 1) / float(size.y));
 
-	// Leftmost 2 columns, vertically centered across 2 rows. Ten rows have no
-	// single middle row, so the block starts at (rows - 2) / 2.
 	constexpr int kBaseCols = 2;
 	constexpr int kBaseRows = 2;
-	if (cols_ < kBaseCols || rows_ < kBaseRows) {
-		throw std::runtime_error("Map: board is too small for a 2x2 base");
-	}
-	int base_col0 = 0;
-	int base_row0 = (rows_ - kBaseRows) / 2;
+
+	int base_col0 = friendly_cell.x;
+	int base_row0 = friendly_cell.y;
 
 	glm::vec2 half_tile(tile_size_ * 0.5f);
 	glm::vec2 block_min(cell_center(base_col0, base_row0 + kBaseRows - 1));
@@ -452,27 +485,16 @@ void Map::load_base_sprite() {
 	}
 	base_half_ = glm::vec2(width, height) * 0.5f;
 
-	int enemy_col0 = cols_ - kBaseCols;
-	glm::vec2 enemy_block_min(cell_center(enemy_col0, base_row0 + kBaseRows - 1));
-	glm::vec2 enemy_block_max(cell_center(enemy_col0 + kBaseCols - 1, base_row0));
+	int enemy_col0 = enemy_cell.x;
+	int enemy_row0 = enemy_cell.y;
+	glm::vec2 enemy_block_min(cell_center(enemy_col0, enemy_row0 + kBaseRows - 1));
+	glm::vec2 enemy_block_max(cell_center(enemy_col0 + kBaseCols - 1, enemy_row0));
 	enemy_block_min -= half_tile;
 	enemy_block_max += half_tile;
 	enemy_base_min_ = enemy_block_min;
 	enemy_base_max_ = enemy_block_max;
 	enemy_anchor_ = 0.5f * (enemy_block_min + enemy_block_max);
 	glm::vec2 enemy_anchor = enemy_anchor_;
-
-	auto mark_base = [&](int col0) {
-		for (int row = base_row0; row < base_row0 + kBaseRows; ++row) {
-			for (int col = col0; col < col0 + kBaseCols; ++col) {
-				if (tiles_[index(col, row)] == Tile::Grass) {
-					tiles_[index(col, row)] = Tile::Base;
-				}
-			}
-		}
-	};
-	mark_base(base_col0);
-	mark_base(enemy_col0);
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glGenTextures(1, &base_tex_);
@@ -612,7 +634,7 @@ void Map::rebuild() {
 	for (int col = 0; col < cols_; ++col) {
 		for (int row = 0; row < rows_; ++row) {
 			Tile tile = tiles_[index(col, row)];
-			if (tile != Tile::Water && tile != Tile::Bridge) continue;
+			if (tile != Tile::Water) continue;
 			river_min = std::min(river_min, col);
 			river_max = std::max(river_max, col);
 		}
@@ -625,7 +647,7 @@ void Map::rebuild() {
 		for (int row = 0; row < rows_; ++row) {
 			for (int col = river_min; col <= river_max; ++col) {
 				Tile tile = tiles_[index(col, row)];
-				if (tile != Tile::Water && tile != Tile::Bridge) continue;
+				if (tile != Tile::Water) continue;
 				glm::vec2 c(cell_center(col, row));
 				glm::vec2 mn = c - glm::vec2(half_tile + 0.04f);
 				glm::vec2 mx = c + glm::vec2(half_tile + 0.04f);
@@ -633,13 +655,6 @@ void Map::rebuild() {
 				tri(backdrop_, glm::vec2(mn.x, mn.y), glm::vec2(mx.x, mx.y), glm::vec2(mn.x, mx.y), water);
 			}
 		}
-
-		glm::vec2 top(cell_center(river_min, 0));
-		glm::vec2 bot(cell_center(river_max, rows_ - 1));
-		float left_x = top.x - half_tile;
-		float right_x = bot.x + half_tile;
-		float top_y = top.y + half_tile;
-		float bot_y = cell_center(river_min, rows_ - 1).y - half_tile;
 
 		struct Deck {
 			int row = 0;
@@ -668,21 +683,27 @@ void Map::rebuild() {
 			deck.y1 = deck.mx.y;
 			decks.push_back(deck);
 		}
-		std::sort(decks.begin(), decks.end(), [](Deck const &a, Deck const &b) { return a.y0 < b.y0; });
 
-		auto bank = [&](float x, int salt) {
-			constexpr float pad = 0.14f;
-			float y = bot_y;
-			for (Deck const &deck : decks) {
-				float lo = deck.y0 - pad;
-				float hi = deck.y1 + pad;
-				if (y < lo) add_stroke({glm::vec2(x, y), glm::vec2(x, lo)}, 0.09f, kInk, 0.025f, salt, false);
-				y = std::max(y, hi);
+		std::vector< Deck > vdecks;
+		for (int col = 0; col < cols_; ++col) {
+			int r0 = -1;
+			int r1 = -1;
+			for (int row = 0; row < rows_; ++row) {
+				if (tiles_[index(col, row)] != Tile::BridgeV) continue;
+				if (r0 < 0) r0 = row;
+				r1 = row;
 			}
-			if (y < top_y) add_stroke({glm::vec2(x, y), glm::vec2(x, top_y)}, 0.09f, kInk, 0.025f, salt + 1, false);
-		};
-		bank(left_x, 41);
-		bank(right_x, 43);
+			if (r0 < 0) continue;
+			glm::vec2 a(cell_center(col, r0));
+			glm::vec2 b(cell_center(col, r1));
+			Deck deck;
+			deck.row = col;
+			deck.mn = glm::vec2(a.x - half_tile * 1.15f, b.y - half_tile - 0.42f);
+			deck.mx = glm::vec2(a.x + half_tile * 1.15f, a.y + half_tile + 0.42f);
+			deck.y0 = deck.mn.y;
+			deck.y1 = deck.mx.y;
+			vdecks.push_back(deck);
+		}
 
 		for (Deck const &deck : decks) {
 			auto outline = shape_round_rect(deck.mn, deck.mx, 0.12f, 2, 70 + deck.row, 0.02f);
@@ -696,28 +717,22 @@ void Map::rebuild() {
 				);
 			}
 		}
+		for (Deck const &deck : vdecks) {
+			auto outline = shape_round_rect(deck.mn, deck.mx, 0.12f, 2, 70 + deck.row, 0.02f);
+			paint_polygon(backdrop_, outline, wood);
+			add_stroke(outline, 0.08f, kInk, 0.02f, 80 + deck.row, true);
+			for (int plank = 0; plank < 6; ++plank) {
+				float x = glm::mix(deck.mn.x + 0.12f, deck.mx.x - 0.12f, (float(plank) + 0.5f) / 6.0f);
+				add_stroke(
+					{glm::vec2(x, deck.mn.y + 0.12f), glm::vec2(x, deck.mx.y - 0.12f)},
+					0.045f, wood_dark, 0.012f, 90 + deck.row * 4 + plank, false
+				);
+			}
+		}
 	}
 
 	upload(backdrop_vbo_, backdrop_vao_, backdrop_);
 	backdrop_count_ = (GLuint)backdrop_.size();
-}
-
-void Map::place_river() {
-	if (cols_ < 4 || rows_ < 3) return;
-	int width = cols_ >= 8 ? 2 : 1;
-	int col0 = (cols_ - width) / 2;
-	int bridge_rows[3] = {
-		std::max(0, rows_ / 6),
-		rows_ / 2,
-		std::min(rows_ - 1, rows_ - 1 - rows_ / 6),
-	};
-	for (int row = 0; row < rows_; ++row) {
-		bool bridge = row == bridge_rows[0] || row == bridge_rows[1] || row == bridge_rows[2];
-		for (int col = col0; col < col0 + width; ++col) {
-			if (tiles_[index(col, row)] == Tile::Base) continue;
-			tiles_[index(col, row)] = bridge ? Tile::Bridge : Tile::Water;
-		}
-	}
 }
 
 void Map::upload(GLuint &vbo, GLuint &vao, std::vector< Vertex > const &verts) const {
