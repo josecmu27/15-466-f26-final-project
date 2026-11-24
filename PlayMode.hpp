@@ -36,6 +36,12 @@ struct PlayMode : Mode {
 	int hover_col = -1;
 	int hover_row = -1;
 
+	glm::vec2 camera = glm::vec2(0.0f);
+	bool pan_left = false, pan_right = false, pan_up = false, pan_down = false;
+	float max_view_half_h = 11.2f;
+	static constexpr float camera_speed = 16.0f;
+	void clamp_camera();
+
 	glm::mat4 clip_from_world(float aspect) const;
 	bool mouse_to_world(glm::vec3 &hit) const;
 	void refresh_hover();

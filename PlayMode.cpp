@@ -127,6 +127,8 @@ PlayMode::PlayMode(bool practice) : practice_(practice) {
 	enemy_basket_ = enemy_basket;
 
 	load_troop_sprite();
+	camera = basket_at;
+	clamp_camera();
 
 	player_data = base_data;
 	director_data = base_data;
@@ -210,6 +212,40 @@ static bool troop_overlaps(glm::vec2 pos, glm::vec2 mn, glm::vec2 mx) {
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_) {
 	window_size = window_size_;
+	if (evt.type == SDL_EVENT_KEY_DOWN) {
+		switch(evt.key.scancode) {
+			case SDL_SCANCODE_W:
+				pan_up = true;
+				return true;
+			case SDL_SCANCODE_A:
+				pan_left = true;
+				return true;
+			case SDL_SCANCODE_S:
+				pan_down = true;
+				return true;
+			case SDL_SCANCODE_D:
+				pan_right = true;
+				return true;
+			default: break;
+		}
+	}
+	if (evt.type == SDL_EVENT_KEY_UP) {
+		switch(evt.key.scancode) {
+			case SDL_SCANCODE_W:
+				pan_up = false;
+				return true;
+			case SDL_SCANCODE_A:
+				pan_left = false;
+				return true;
+			case SDL_SCANCODE_S:
+				pan_down = false;
+				return true;
+			case SDL_SCANCODE_D:
+				pan_right = false;
+				return true;
+			default: break;
+		}
+	}
 	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_ESCAPE && practice_) {
 		leave_practice_ = true;
 		return true;
@@ -339,6 +375,14 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size_
 }
 
 void PlayMode::update(float elapsed) {
+
+	if (pan_left) camera.x -= elapsed * camera_speed;
+	if (pan_right) camera.x += elapsed * camera_speed;
+	if (pan_up) camera.y += elapsed * camera_speed;
+	if (pan_down) camera.y -= elapsed * camera_speed;
+	clamp_camera();
+	if (box_dragging_) mouse_to_world(box_end_);
+
 	if (practice_) {
 		time_ += elapsed;
 		advance_practice();
@@ -453,9 +497,28 @@ glm::mat4 PlayMode::clip_from_world(float aspect) const {
 	float half_h = 0.5f * (mx.y - mn.y) + margin;
 	if (half_w < half_h * aspect) half_w = half_h * aspect;
 	else half_h = half_w / aspect;
-	float cx = 0.5f * (mn.x + mx.x);
-	float cy = 0.5f * (mn.y + mx.y);
-	return glm::ortho(cx - half_w, cx + half_w, cy - half_h, cy + half_h, -5.0f, 5.0f);
+
+	if (half_h <= max_view_half_h) {
+		float cx = 0.5f * (mn.x + mx.x);
+		float cy = 0.5f * (mn.y + mx.y);
+		return glm::ortho(cx - half_w, cx + half_w, cy - half_h, cy + half_h, -5.0f, 5.0f);
+	}
+
+	half_h = max_view_half_h;
+	half_w = half_h * aspect;
+	return glm::ortho(camera.x - half_w, camera.x + half_w, camera.y - half_h, camera.y + half_h, -5.0f, 5.0f);
+}
+
+void PlayMode::clamp_camera() {
+	glm::vec2 mn = glm::vec2(World::get_world()->map.bounds_min()) - glm::vec2(1.2f);
+	glm::vec2 mx = glm::vec2(World::get_world()->map.bounds_max()) + glm::vec2(1.2f);
+	glm::vec2 half(max_view_half_h * map_aspect(), max_view_half_h);
+	for (int i = 0; i < 2; i++) {
+		if (mx[i] - mn[i] <= 2.0f * half[i])
+			camera[i] = 0.5f * (mn[i] + mx[i]);
+		else
+			camera[i] = glm::clamp(camera[i], mn[i] + half[i], mx[i] - half[i]);
+	}
 }
 
 namespace {
