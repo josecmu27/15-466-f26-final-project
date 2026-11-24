@@ -28,9 +28,10 @@ const glm::u8vec4 kCherryLight(222, 92, 70, 255);
 const glm::u8vec4 kCream(255, 236, 206, 255);
 
 // Buttons sit low, under the two lineups (all the same size):
-const glm::vec2 kStartCenter(0.0f, -0.52f);
-const glm::vec2 kHowCenter(0.0f, -0.70f);
-const glm::vec2 kQuitCenter(0.0f, -0.88f);
+const glm::vec2 kLevel1Center(-0.6f, -0.34f);
+const glm::vec2 kLevel2Center(-0.6f, -0.52f);
+const glm::vec2 kHowCenter(-0.6f, -0.70f);
+const glm::vec2 kQuitCenter(-0.6f, -0.88f);
 const glm::vec2 kButtonHalf(0.40f, 0.072f);
 
 bool inside_button(glm::vec2 ui, glm::vec2 center) {
@@ -232,7 +233,8 @@ glm::vec2 TitleMode::mouse_ui() const {
 }
 
 TitleMode::Button TitleMode::button_at(glm::vec2 ui) const {
-	if (inside_button(ui, kStartCenter)) return Button::Start;
+	if (inside_button(ui, kLevel1Center)) return Button::Level1;
+	if (inside_button(ui, kLevel2Center)) return Button::Level2;
 	if (inside_button(ui, kHowCenter)) return Button::How;
 	if (inside_button(ui, kQuitCenter)) return Button::Quit;
 	return Button::None;
@@ -261,9 +263,14 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 		mouse_ = glm::vec2(evt.button.x, evt.button.y);
 		Button released = button_at(mouse_ui());
 		if (released != Button::None && released == pressing_) {
-			if (released == Button::Start) {
+			if (released == Button::Level1) {
 				GameAudio::play(GameAudio::Sfx::UiConfirm);
 				start_requested_ = true;
+				start_level_ = Map::level_1;
+			} else if (released == Button::Level2) {
+				GameAudio::play(GameAudio::Sfx::UiConfirm);
+				start_requested_ = true;
+				start_level_ = Map::level_2;
 			} else if (released == Button::How) {
 				GameAudio::play(GameAudio::Sfx::UiConfirm);
 				how_requested_ = true;
@@ -279,6 +286,7 @@ bool TitleMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 		if (evt.key.key == SDLK_RETURN || evt.key.key == SDLK_KP_ENTER || evt.key.key == SDLK_SPACE) {
 			GameAudio::play(GameAudio::Sfx::UiConfirm);
 			start_requested_ = true;
+			start_level_ = Map::level_1;
 			return true;
 		}
 		if (evt.key.key == SDLK_ESCAPE) {
@@ -297,13 +305,13 @@ void TitleMode::update(float elapsed) {
 
 	if (how_requested_) {
 		auto keep_alive = shared_from_this();
-		Mode::set_current(std::make_shared< PlayMode >(true));
+		Mode::set_current(std::make_shared< PlayMode >(Map::level_0, true));
 		return;
 	}
 	if (start_requested_) {
 		// Keep this mode alive until update() returns; set_current drops the last other reference.
 		auto keep_alive = shared_from_this();
-		Mode::set_current(std::make_shared< PlayMode >());
+		Mode::set_current(std::make_shared< PlayMode >(start_level_));
 	}
 }
 
@@ -383,7 +391,7 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 	Mesh controls;
 	{
 		// A dark plate so the labels stay readable over the fighters' feet.
-		paint_polygon(controls, round_rect(glm::vec2(-0.52f, -1.05f), glm::vec2(0.52f, -0.40f), 0.08f, 4), glm::u8vec4(16, 10, 12, 215));
+		paint_polygon(controls, round_rect(glm::vec2(-0.52f - 0.6f, -1.05f), glm::vec2(0.52f - 0.6f, -0.2f), 0.08f, 4), glm::u8vec4(16, 10, 12, 215));
 		auto paint_button = [&](Button button, glm::vec2 center, glm::u8vec4 fill, glm::u8vec4 fill_hover) {
 			glm::vec2 lift = button_lift(button);
 			auto body = round_rect(center - kButtonHalf + lift, center + kButtonHalf + lift, 0.05f, 4);
@@ -392,7 +400,8 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 			paint_polygon(controls, body, hover_ == button ? fill_hover : fill);
 			paint_outline(controls, body, 0.016f, kInk, true);
 		};
-		paint_button(Button::Start, kStartCenter, kCherry, kCherryLight);
+		paint_button(Button::Level1, kLevel1Center, kCherry, kCherryLight);
+		paint_button(Button::Level2, kLevel2Center, kCherry, kCherryLight);
 		paint_button(Button::How, kHowCenter, kPaperShade, kPaperLight);
 		paint_button(Button::Quit, kQuitCenter, kPaperShade, kPaperLight);
 	}
@@ -400,7 +409,8 @@ void TitleMode::draw(glm::uvec2 const &drawable_size) {
 
 	{
 		TextRenderer text(clip_from_ui);
-		draw_bold_text(text, *ui_font, "START", kStartCenter + button_lift(Button::Start), 0.075f, 0.002f, kCream);
+		draw_bold_text(text, *ui_font, "LEVEL 1", kLevel1Center + button_lift(Button::Level1), 0.075f, 0.002f, kCream);
+		draw_bold_text(text, *ui_font, "LEVEL 2", kLevel2Center + button_lift(Button::Level2), 0.075f, 0.002f, kCream);
 		draw_bold_text(text, *ui_font, "HOW TO PLAY", kHowCenter + button_lift(Button::How), 0.062f, 0.002f, kInk);
 		draw_bold_text(text, *ui_font, "QUIT", kQuitCenter + button_lift(Button::Quit), 0.075f, 0.002f, kInk);
 	}

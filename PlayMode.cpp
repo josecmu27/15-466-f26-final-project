@@ -101,10 +101,12 @@ void add_foot_shadow(std::vector< ColorVertex > &verts, glm::vec2 center, glm::v
 
 }
 
-PlayMode::PlayMode(bool practice) : practice_(practice) {
+PlayMode::PlayMode(char const *level, bool practice) : practice_(practice) {
 	int w = 0, h = 0;
 	SDL_GetWindowSize(Mode::window, &w, &h);
 	if (w > 0 && h > 0) window_size = glm::uvec2((unsigned)w, (unsigned)h);
+
+	level_ascii = level;
 
 	GameAudio::play_music(GameAudio::Music::Battle);
 
@@ -114,6 +116,7 @@ PlayMode::PlayMode(bool practice) : practice_(practice) {
 
 	World::get_world()->play_mode = this;
 	World::get_world()->clear();
+	World::get_world()->map.load(level_ascii);
 
 	glm::vec2 basket_at = 0.5f * (World::get_world()->map.friendly_base_min() + World::get_world()->map.friendly_base_max());
 	auto basket = std::make_shared<Ranged>(basket_at, &player_data.basket, Team::BASKET);
@@ -388,7 +391,7 @@ void PlayMode::update(float elapsed) {
 		advance_practice();
 		if (leave_practice_ || start_real_) {
 			auto keep_alive = shared_from_this();
-			if (start_real_) Mode::set_current(std::make_shared< PlayMode >());
+			if (start_real_) Mode::set_current(std::make_shared< PlayMode >(Map::level_1));
 			else Mode::set_current(std::make_shared< TitleMode >());
 			return;
 		}
@@ -398,7 +401,7 @@ void PlayMode::update(float elapsed) {
 
 	if (restart_) {
 		auto keep_alive = shared_from_this();
-		Mode::set_current(std::make_shared< PlayMode >());
+		Mode::set_current(std::make_shared< PlayMode >(level_ascii));
 		return;
 	}
 

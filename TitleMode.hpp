@@ -34,13 +34,14 @@ struct TitleMode : Mode {
 private:
 	float time_ = 0.0f; // drives the film grain/scratch flicker
 	bool start_requested_ = false;
+	char const *start_level_ = nullptr;
 	bool how_requested_ = false;
 
 	glm::uvec2 window_size_ = glm::uvec2(1280, 720);
 	glm::uvec2 drawable_size_ = glm::uvec2(1280, 720);
 	glm::vec2 mouse_ = glm::vec2(0.0f);
 
-	enum class Button { None, Start, How, Quit };
+	enum class Button { None, Level1, Level2, How, Quit };
 	Button hover_ = Button::None;
 	Button pressing_ = Button::None; // button the left mouse went down on
 

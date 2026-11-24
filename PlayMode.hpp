@@ -21,7 +21,7 @@
 #include <vector>
 
 struct PlayMode : Mode {
-	explicit PlayMode(bool practice = false);
+	explicit PlayMode(char const *level, bool practice = false);
 	virtual ~PlayMode();
 
 	virtual bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
@@ -128,4 +128,6 @@ struct PlayMode : Mode {
 	int lesson_ = 0;
 	bool leave_practice_ = false;
 	bool start_real_ = false;
+
+	char const *level_ascii;
 };
