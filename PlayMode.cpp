@@ -117,6 +117,9 @@ PlayMode::PlayMode(char const *level, bool practice) : practice_(practice) {
 	mouse = glm::vec2(mx, my);
 
 	World::get_world()->play_mode = this;
+	// Level 2 is the larger map, so the match runs for five minutes instead of three.
+	bool level_2 = level_ascii == Map::level_2;
+	World::get_world()->match_time_duration = level_2 ? 300.0f : 180.0f;
 	World::get_world()->clear();
 	World::get_world()->map.load(level_ascii);
 
@@ -142,7 +145,7 @@ PlayMode::PlayMode(char const *level, bool practice) : practice_(practice) {
 	World::get_world()->add_player_resources(10);
 	World::get_world()->add_director_resources(10);
 
-	spawn_director = std::make_unique<SpawnDirector>(director_data, 15466);
+	spawn_director = std::make_unique<SpawnDirector>(director_data, 15466, level_2 ? 300.0f : 200.0f);
 }
 
 PlayMode::~PlayMode() {

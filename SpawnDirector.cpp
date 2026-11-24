@@ -13,8 +13,9 @@
 #include <iostream>
 #include <limits>
 
-SpawnDirector::SpawnDirector(DataAssets& data, uint32_t seed) {
+SpawnDirector::SpawnDirector(DataAssets& data, uint32_t seed, float match_seconds) {
     director_data = &data;
+    base_match_time = match_seconds;
     reset(seed);
 }
 

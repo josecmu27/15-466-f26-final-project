@@ -68,7 +68,7 @@ struct WorldSnapshot {
 
 class SpawnDirector {
 public:
-    SpawnDirector(DataAssets& data, uint32_t seed);
+    SpawnDirector(DataAssets& data, uint32_t seed, float match_seconds = 200.0f);
     void reset(uint32_t seed);
     void update(float elapsed);
 
